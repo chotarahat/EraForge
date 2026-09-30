@@ -32,6 +32,8 @@ def _validate_project_id(project_id: str) -> str:
 def create_project(
     name: str,
     scene_plan: ScenePlan | None = None,
+    script: str = "",
+    duration: float = 60,
 ) -> dict:
     name = name.strip()
 
@@ -48,6 +50,8 @@ def create_project(
         "name": name,
         "created_at": now,
         "updated_at": now,
+        "script": script,
+        "duration": duration,
         "scene_plan": scene_plan.model_dump() if scene_plan else None,
     }
 
@@ -57,7 +61,6 @@ def create_project(
     )
 
     return project
-
 
 def list_projects() -> list[dict]:
     PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -103,6 +106,8 @@ def update_project(
     project_id: str,
     name: str | None = None,
     scene_plan: ScenePlan | None = None,
+    script: str | None = None,
+    duration: float | None = None,
 ) -> dict | None:
     project = get_project(project_id)
 
@@ -120,6 +125,12 @@ def update_project(
     if scene_plan is not None:
         project["scene_plan"] = scene_plan.model_dump()
 
+    if script is not None:
+        project["script"] = script
+
+    if duration is not None:
+        project["duration"] = duration
+
     project["updated_at"] = _utc_now().isoformat()
 
     _project_path(project_id).write_text(
@@ -128,7 +139,6 @@ def update_project(
     )
 
     return project
-
 
 def delete_project(project_id: str) -> bool:
     project_id = _validate_project_id(project_id)

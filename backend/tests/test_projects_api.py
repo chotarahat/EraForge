@@ -55,6 +55,8 @@ class TestProjectsAPI(unittest.TestCase):
             "/api/projects",
             json={
                 "name": "My History",
+                "script": "A historical story.",
+                "duration": 90,
                 "scene_plan": make_scene_plan(),
             },
         )
@@ -66,6 +68,11 @@ class TestProjectsAPI(unittest.TestCase):
         self.assertEqual(data["name"], "My History")
         self.assertIsNotNone(data["id"])
         self.assertIsNotNone(data["scene_plan"])
+        self.assertEqual(
+            data["script"],
+            "A historical story.",
+        )
+        self.assertEqual(data["duration"], 90)
 
     def test_create_project_without_scene_plan(self):
         response = client.post(
@@ -151,6 +158,31 @@ class TestProjectsAPI(unittest.TestCase):
             response.json()["name"],
             "New Name",
         )
+
+    def test_update_project_script_and_duration(self):
+        created = client.post(
+            "/api/projects",
+            json={
+                "name": "History",
+                "script": "Old script",
+                "duration": 60,
+            },
+        ).json()
+
+        response = client.put(
+            f"/api/projects/{created['id']}",
+            json={
+                "script": "Updated script",
+                "duration": 120,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+
+        self.assertEqual(data["script"], "Updated script")
+        self.assertEqual(data["duration"], 120)
 
     def test_update_project_scene_plan(self):
         created = client.post(

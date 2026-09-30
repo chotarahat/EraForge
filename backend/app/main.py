@@ -56,11 +56,15 @@ class SubtitleSyncRequest(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str
+    script: str = ""
+    duration: float = 60
     scene_plan: ScenePlan | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
     name: str | None = None
+    script: str | None = None
+    duration: float | None = None
     scene_plan: ScenePlan | None = None
 
 
@@ -90,6 +94,8 @@ def project_create(payload: ProjectCreateRequest):
     try:
         return create_project(
             name=payload.name,
+            script=payload.script,
+            duration=payload.duration,
             scene_plan=payload.scene_plan,
         )
     except ValueError as exc:
@@ -126,6 +132,8 @@ def project_update(
         project = update_project(
             project_id=project_id,
             name=payload.name,
+            script=payload.script,
+            duration=payload.duration,
             scene_plan=payload.scene_plan,
         )
     except ValueError as exc:

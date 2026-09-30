@@ -53,12 +53,19 @@ class TestProjectStore(unittest.TestCase):
 
     def test_create_project(self):
         project = create_project(
-            "My History Project",
-            make_scene_plan(),
+            name="My History Project",
+            scene_plan=make_scene_plan(),
+            script="This is my historical script.",
+            duration=90,
         )
 
         self.assertEqual(project["name"], "My History Project")
         self.assertIsNotNone(project["scene_plan"])
+        self.assertEqual(
+            project["script"],
+            "This is my historical script.",
+        )
+        self.assertEqual(project["duration"], 90)
         self.assertTrue(
             (self.projects_root / f"{project['id']}.json").exists()
         )
@@ -102,6 +109,23 @@ class TestProjectStore(unittest.TestCase):
 
         stored = get_project(created["id"])
         self.assertEqual(stored["name"], "New Name")
+
+    def test_update_project_script_and_duration(self):
+        created = create_project(
+            name="History",
+            script="Old script",
+            duration=60,
+        )
+
+        updated = update_project(
+            project_id=created["id"],
+            script="Updated script",
+            duration=120,
+        )
+
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated["script"], "Updated script")
+        self.assertEqual(updated["duration"], 120)
 
     def test_update_project_scene_plan(self):
         created = create_project("History")
