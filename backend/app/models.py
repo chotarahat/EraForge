@@ -1,4 +1,5 @@
 from .assets import AssetRequirement
+from app.geography import GeographyPlan
 from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
@@ -14,6 +15,7 @@ class Scene(BaseModel):
     camera: str = Field(description="Camera movement such as zoom, pan, orbit or static")
     caption: str = Field(description="Short on-screen caption")
     location: str | None = Field(default=None, description="Geographic place if relevant")
+    geography: GeographyPlan | None = None
     asset_hints: list[str] = Field(default_factory=list, description="Suggested asset categories")
     asset_requirements: list[AssetRequirement] = Field(default_factory=list)
 
