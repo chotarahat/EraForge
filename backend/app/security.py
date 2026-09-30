@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 def get_allowed_origins() -> list[str]:
-    raw = os.getenv(
+    raw = os.environ.get(
         "ERAFORGE_ALLOWED_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173",
     )
@@ -17,7 +23,7 @@ def get_allowed_origins() -> list[str]:
 
 
 def get_allowed_hosts() -> list[str]:
-    raw = os.getenv(
+    raw = os.environ.get(
         "ERAFORGE_ALLOWED_HOSTS",
         "localhost,127.0.0.1,testserver",
     )
@@ -30,7 +36,7 @@ def get_allowed_hosts() -> list[str]:
 
 
 def get_docs_enabled() -> bool:
-    return os.getenv(
+    return os.environ.get(
         "ERAFORGE_ENABLE_DOCS",
         "true",
     ).lower() in {
@@ -40,7 +46,7 @@ def get_docs_enabled() -> bool:
         "on",
     }
 def get_max_request_bytes() -> int:
-    raw = os.getenv(
+    raw = os.environ.get(
         "ERAFORGE_MAX_REQUEST_BYTES",
         str(10 * 1024 * 1024),
     )
