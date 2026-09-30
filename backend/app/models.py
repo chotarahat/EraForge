@@ -1,3 +1,4 @@
+from .assets import AssetRequirement
 from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
@@ -14,6 +15,7 @@ class Scene(BaseModel):
     caption: str = Field(description="Short on-screen caption")
     location: str | None = Field(default=None, description="Geographic place if relevant")
     asset_hints: list[str] = Field(default_factory=list, description="Suggested asset categories")
+    asset_requirements: list[AssetRequirement] = Field(default_factory=list)
 
 
 class ScenePlan(BaseModel):

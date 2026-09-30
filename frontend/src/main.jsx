@@ -134,6 +134,9 @@ function App() {
   const [draftPlan, setDraftPlan] = useState(null);
   const [savedPlan, setSavedPlan] = useState(null);
   const [aiConfig, setAIConfig] = useState(null);
+  const [assetPlan, setAssetPlan] = useState([]);
+  const [assetLoading, setAssetLoading] = useState(false);
+  const [assetError, setAssetError] = useState("");
   const timelineErrors = draftPlan
     ? validateTimeline(draftPlan)
     : [];
@@ -144,6 +147,43 @@ function App() {
       .then((data) => setAIConfig(data))
       .catch(() => setAIConfig(null));
   }, []);
+
+  async function refreshAssetPlan(planToAnalyze = draftPlan) {
+    if (!planToAnalyze) {
+      setAssetPlan([]);
+      return;
+    }
+
+    try {
+      setAssetLoading(true);
+      setAssetError("");
+
+      const response = await fetch(`${API_URL}/api/assets/plan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(planToAnalyze),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail = Array.isArray(data.detail)
+          ? data.detail.map((item) => item.msg).join("; ")
+          : data.detail || "Failed to build asset plan.";
+
+        throw new Error(detail);
+      }
+
+      setAssetPlan(data);
+    } catch (err) {
+      setAssetError(err.message || "Failed to build asset plan.");
+      setAssetPlan([]);
+    } finally {
+      setAssetLoading(false);
+    }
+  }
   
   function updateScene(sceneId, field, value) {
     setDraftPlan((current) => {
@@ -470,6 +510,9 @@ function App() {
       setSavedPlan(applied);
       setPlan(applied);
       setDraftPlan(applied);
+
+      await refreshAssetPlan(applied);
+
       setError("");
     } catch (err) {
       setError(err.message || "Failed to validate scene plan.");
@@ -519,6 +562,8 @@ function App() {
       setPlan(initialPlan);
       setDraftPlan(initialPlan);
       setSavedPlan(initialPlan);
+
+      await refreshAssetPlan(initialPlan);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -587,6 +632,19 @@ function App() {
                     onClick={addScene}
                   >
                     + Add Scene
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => refreshAssetPlan(draftPlan)}
+                    disabled={
+                      !draftPlan ||
+                      timelineErrors.length > 0 ||
+                      assetLoading
+                    }
+                  >
+                    {assetLoading ? "Planning Assets..." : "Plan Assets"}
                   </button>
 
                   <span className="timeline-info">
@@ -820,6 +878,105 @@ function App() {
                   </label>
                 </article>
                 ))}
+              </div>
+
+              <div className="asset-panel">
+                <div className="asset-panel-header">
+                  <div>
+                    <h3>Asset Manifest</h3>
+                    <p className="muted">
+                      Structured visual assets required by the current scene plan.
+                    </p>
+                  </div>
+
+                  {draftPlan && (
+                    <span className="pill">
+                      {assetPlan.length} assets
+                    </span>
+                  )}
+                </div>
+
+                {assetError && (
+                  <div className="asset-error">
+                    {assetError}
+                  </div>
+                )}
+
+                {!assetError && assetPlan.length === 0 ? (
+                  <div className="asset-empty">
+                    {assetLoading
+                      ? "Building asset manifest..."
+                      : "No asset manifest generated yet."}
+                  </div>
+                ) : (
+                  <div className="asset-list">
+                    {assetPlan.map((asset) => {
+                      const sceneIds = asset.metadata?.scene_ids || [];
+
+                      return (
+                        <article
+                          className="asset-card"
+                          key={asset.id}
+                        >
+                          <div className="asset-card-header">
+                            <div>
+                              <div className="asset-name">
+                                {asset.name}
+                              </div>
+
+                              <div className="asset-id">
+                                {asset.id}
+                              </div>
+                            </div>
+
+                            <span className="asset-status">
+                              {asset.status}
+                            </span>
+                          </div>
+
+                          <div className="asset-meta">
+                            <span>
+                              Type: <strong>{asset.type}</strong>
+                            </span>
+
+                            <span>
+                              Source: <strong>{asset.source}</strong>
+                            </span>
+                          </div>
+
+                          <div className="asset-scenes">
+                            <span>Used in:</span>
+
+                            {sceneIds.length > 0 ? (
+                              sceneIds.map((sceneId) => {
+                                const sceneIndex =
+                                  draftPlan?.scenes.findIndex(
+                                    (scene) => scene.id === sceneId
+                                  );
+
+                                return (
+                                  <span
+                                    className="asset-scene-tag"
+                                    key={sceneId}
+                                  >
+                                    Scene{" "}
+                                    {sceneIndex >= 0
+                                      ? sceneIndex + 1
+                                      : sceneId}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="muted">
+                                No scene references
+                              </span>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           )}
