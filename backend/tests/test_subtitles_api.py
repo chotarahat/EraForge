@@ -102,6 +102,35 @@ class TestSubtitlesAPI(unittest.TestCase):
             422,
         )
 
+    def test_subtitle_generate_endpoint(self):
+        response = self.client.post(
+            "/api/subtitles/generate",
+            json=self.payload(),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        data = response.json()
+
+        self.assertEqual(
+            data["cue_count"],
+            2,
+        )
+
+        self.assertTrue(
+            data["output_file"].endswith(
+                "subtitles.srt"
+            )
+        )
+
+        self.assertIn(
+            "History begins here.",
+            data["srt"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

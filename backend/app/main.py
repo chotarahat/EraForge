@@ -26,6 +26,7 @@ from app.subtitles import (
     SubtitleTrack,
     build_subtitle_track,
     subtitle_track_to_srt,
+    write_srt_file,
 )
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
@@ -104,6 +105,37 @@ def subtitle_srt(plan: ScenePlan):
         "cue_count": len(track.cues),
         "srt": subtitle_track_to_srt(track),
     }
+
+
+@app.post("/api/subtitles/generate")
+def subtitle_generate(plan: ScenePlan):
+    track = build_subtitle_track(plan)
+
+    output_path = write_srt_file(track)
+
+    return {
+        "cue_count": len(track.cues),
+        "output_file": output_path,
+        "srt": subtitle_track_to_srt(track),
+    }
+
+
+@app.get("/api/subtitles/file/{filename}")
+def subtitle_file(filename: str):
+    output_dir = Path("backend/outputs/subtitles")
+    file_path = output_dir / Path(filename).name
+
+    if not file_path.exists() or file_path.suffix.lower() != ".srt":
+        raise HTTPException(
+            status_code=404,
+            detail="Subtitle file not found",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/x-subrip",
+        filename=file_path.name,
+    )
 
 
 @app.post("/api/narration/plan", response_model=NarrationPlan)

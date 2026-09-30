@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -138,3 +139,22 @@ def subtitle_track_to_srt(track: SubtitleTrack) -> str:
         return ""
 
     return "\n\n".join(blocks) + "\n"
+
+
+def write_srt_file(
+    track: SubtitleTrack,
+    output_path: str = "backend/outputs/subtitles/subtitles.srt",
+) -> str:
+    path = Path(output_path)
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path.write_text(
+        subtitle_track_to_srt(track),
+        encoding="utf-8",
+    )
+
+    return str(path)
