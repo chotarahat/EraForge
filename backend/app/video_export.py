@@ -33,27 +33,14 @@ def get_ffmpeg_path() -> str:
     return path
 
 
-def export_mp4(
+def build_ffmpeg_command(
     image_sequence: str,
     output_file: str,
-    width: int,
-    height: int,
-    fps: int = 30,
-    settings: VideoExportSettings | None = None,
-) -> VideoExportResult:
-    settings = settings or VideoExportSettings(
-        fps=fps
-    )
-
+    settings: VideoExportSettings,
+) -> list[str]:
     ffmpeg = get_ffmpeg_path()
 
-    output_path = Path(output_file)
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    command = [
+    return [
         ffmpeg,
         "-y",
         "-framerate",
@@ -66,8 +53,44 @@ def export_mp4(
         settings.pixel_format,
         "-crf",
         str(settings.crf),
-        str(output_path),
+        "-movflags",
+        "+faststart",
+        output_file,
     ]
+
+
+def export_mp4(
+    image_sequence: str,
+    output_file: str,
+    width: int,
+    height: int,
+    fps: int = 30,
+    settings: VideoExportSettings | None = None,
+) -> VideoExportResult:
+    settings = settings or VideoExportSettings(
+        fps=fps
+    )
+
+    input_pattern = Path(image_sequence)
+
+    if "%" not in input_pattern.name:
+        raise ValueError(
+            "image_sequence must be an FFmpeg sequence pattern "
+            "such as frame_%06d.png"
+        )
+
+    output_path = Path(output_file)
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    command = build_ffmpeg_command(
+        image_sequence=image_sequence,
+        output_file=str(output_path),
+        settings=settings,
+    )
 
     process = subprocess.run(
         command,
