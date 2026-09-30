@@ -144,6 +144,9 @@ function App() {
   });
 
   const [assetResolving, setAssetResolving] = useState(false);
+  const [geographyPlan, setGeographyPlan] = useState({});
+  const [geographyLoading, setGeographyLoading] = useState(false);
+  const [geographyError, setGeographyError] = useState("");
   const timelineErrors = draftPlan
     ? validateTimeline(draftPlan)
     : [];
@@ -235,6 +238,49 @@ function App() {
       });
     } finally {
       setAssetResolving(false);
+    }
+  }
+
+  async function planGeography(planToAnalyze = draftPlan) {
+    if (!planToAnalyze) {
+      setGeographyPlan({});
+      return;
+    }
+
+    try {
+      setGeographyLoading(true);
+      setGeographyError("");
+
+      const response = await fetch(
+        `${API_URL}/api/geography/plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(planToAnalyze),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail = Array.isArray(data.detail)
+          ? data.detail.map((item) => item.msg).join("; ")
+          : data.detail || "Failed to build geography plan.";
+
+        throw new Error(detail);
+      }
+
+      setGeographyPlan(data);
+    } catch (err) {
+      setGeographyError(
+        err.message || "Failed to build geography plan."
+      );
+
+      setGeographyPlan({});
+    } finally {
+      setGeographyLoading(false);
     }
   }
   
@@ -566,6 +612,7 @@ function App() {
 
       await refreshAssetPlan(applied);
       await resolveAssets(applied);
+      await planGeography(applied);
 
       setError("");
     } catch (err) {
@@ -619,6 +666,7 @@ function App() {
 
       await refreshAssetPlan(initialPlan);
       await resolveAssets(initialPlan);
+      await planGeography(initialPlan);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -715,6 +763,21 @@ function App() {
                     {assetResolving
                       ? "Resolving Assets..."
                       : "Resolve Assets"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => planGeography(draftPlan)}
+                    disabled={
+                      !draftPlan ||
+                      timelineErrors.length > 0 ||
+                      geographyLoading
+                    }
+                  >
+                    {geographyLoading
+                      ? "Planning Geography..."
+                      : "Plan Geography"}
                   </button>
 
                   <span className="timeline-info">
@@ -1081,6 +1144,140 @@ function App() {
                               </span>
                             )}
                           </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="geography-panel">
+                <div className="geography-panel-header">
+                  <div>
+                    <h3>Geographic Plan</h3>
+                    <p className="muted">
+                      Geographic regions, markers, routes, and map operations
+                      detected for the current scene plan.
+                    </p>
+                  </div>
+
+                  <span className="pill">
+                    {Object.values(geographyPlan).filter(
+                      (item) => item.enabled
+                    ).length} geographic scenes
+                  </span>
+                </div>
+
+                {geographyError && (
+                  <div className="asset-error">
+                    {geographyError}
+                  </div>
+                )}
+
+                {!geographyLoading &&
+                Object.keys(geographyPlan).length === 0 ? (
+                  <div className="asset-empty">
+                    No geography plan generated yet.
+                  </div>
+                ) : (
+                  <div className="geography-scene-list">
+                    {draftPlan?.scenes.map((scene, index) => {
+                      const geo = geographyPlan[scene.id];
+
+                      if (!geo?.enabled) {
+                        return null;
+                      }
+
+                      return (
+                        <article
+                          className="geography-card"
+                          key={scene.id}
+                        >
+                          <div className="geography-card-header">
+                            <div>
+                              <div className="scene-number">
+                                SCENE {index + 1}
+                              </div>
+
+                              <h4>{scene.title}</h4>
+                            </div>
+
+                            <span className="asset-resolution-badge available">
+                              geographic
+                            </span>
+                          </div>
+
+                          <div className="geography-meta">
+                            <span>
+                              Source: <strong>{geo.map_source}</strong>
+                            </span>
+
+                            <span>
+                              Zoom: <strong>{geo.zoom_level}</strong>
+                            </span>
+                          </div>
+
+                          {geo.center && (
+                            <div className="geography-center">
+                              Center:
+                              <strong>
+                                {" "}
+                                {geo.center.latitude.toFixed(4)},
+                                {" "}
+                                {geo.center.longitude.toFixed(4)}
+                              </strong>
+                            </div>
+                          )}
+
+                          {geo.regions.length > 0 && (
+                            <div className="geography-section">
+                              <span className="geography-label">
+                                Regions
+                              </span>
+
+                              <div className="geography-tags">
+                                {geo.regions.map((region) => (
+                                  <span
+                                    className="asset-scene-tag"
+                                    key={region.id}
+                                  >
+                                    {region.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {geo.operations.length > 0 && (
+                            <div className="geography-section">
+                              <span className="geography-label">
+                                Operations
+                              </span>
+
+                              <div className="geography-operations">
+                                {geo.operations.map((operation, opIndex) => (
+                                  <div
+                                    className="geography-operation"
+                                    key={`${scene.id}-${opIndex}`}
+                                  >
+                                    <strong>
+                                      {operation.type}
+                                    </strong>
+
+                                    {operation.target_id && (
+                                      <span>
+                                        → {operation.target_id}
+                                      </span>
+                                    )}
+
+                                    <span>
+                                      {operation.duration}s
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </article>
                       );
                     })}
