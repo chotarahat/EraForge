@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.asset_manifest import build_asset_manifest, resolve_asset_manifest
 from app.assets import AssetDefinition, AssetResolutionResult
 from app.geography import GeographyPlan
@@ -22,7 +23,11 @@ from app.project_store import (
     list_projects,
     update_project,
 )
-from app.security import get_allowed_origins, get_docs_enabled
+from app.security import (
+    get_allowed_hosts,
+    get_allowed_origins,
+    get_docs_enabled,
+)
 from app.narration import (
     LocalTTS,
     NarrationManifest,
@@ -77,6 +82,11 @@ app = FastAPI(
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
+)
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=get_allowed_hosts(),
 )
 
 app.add_middleware(
