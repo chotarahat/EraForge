@@ -479,6 +479,3 @@ Before submitting a pull request:
 EraForge is released under the MIT License.
 
 See [LICENSE](LICENSE).
-
-````
-
