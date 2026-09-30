@@ -135,6 +135,10 @@ function App() {
   const [savedPlan, setSavedPlan] = useState(null);
   const [aiConfig, setAIConfig] = useState(null);
   const [assetPlan, setAssetPlan] = useState([]);
+  const [renderPreview, setRenderPreview] = useState(null);
+  const [renderLoading, setRenderLoading] = useState(false);
+  const [renderError, setRenderError] = useState("");
+  const [selectedRenderScene, setSelectedRenderScene] = useState(null);
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState("");
   const [assetResolution, setAssetResolution] = useState({
@@ -238,6 +242,40 @@ function App() {
       });
     } finally {
       setAssetResolving(false);
+    }
+  }
+
+  async function renderPreviewScenes() {
+    setRenderLoading(true);
+    setRenderError("");
+
+    try {
+      const response = await fetch(`${API_URL}/api/render/preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(plan),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.detail || `Render failed (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      setRenderPreview(data);
+
+      if (data.scene_files?.length) {
+        setSelectedRenderScene(data.scene_files[0]);
+      }
+    } catch (error) {
+      setRenderError(error.message || "Failed to render preview");
+    } finally {
+      setRenderLoading(false);
     }
   }
 
@@ -813,6 +851,15 @@ function App() {
                   >
                     Apply Changes
                   </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={renderPreviewScenes}
+                    disabled={renderLoading || !plan?.scenes?.length}
+                  >
+                    {renderLoading ? "Rendering..." : "Render Preview"}
+                  </button>
                 </div>
               </div>
 
@@ -1284,6 +1331,82 @@ function App() {
                   </div>
                 )}
               </div>
+
+              <section className="panel render-preview-panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Render Preview</h2>
+                    <p>Generate and preview the current scene animation render.</p>
+                  </div>
+                </div>
+
+                {renderError && (
+                  <div className="render-error">
+                    {renderError}
+                  </div>
+                )}
+
+                {renderPreview ? (
+                  <div className="render-preview-content">
+                    <div className="render-preview-meta">
+                      <span>
+                        {renderPreview.scene_count} scenes
+                      </span>
+
+                      <span>
+                        {renderPreview.width} × {renderPreview.height}
+                      </span>
+
+                      <span>
+                        {renderPreview.total_duration.toFixed(2)}s
+                      </span>
+                    </div>
+
+                    <div className="render-preview-layout">
+                      <div className="render-scene-list">
+                        {renderPreview.scene_files.map((sceneFile, index) => {
+                          const filename = sceneFile.split(/[\\/]/).pop();
+
+                          return (
+                            <button
+                              type="button"
+                              key={sceneFile}
+                              className={
+                                selectedRenderScene === sceneFile
+                                  ? "render-scene-item active"
+                                  : "render-scene-item"
+                              }
+                              onClick={() => setSelectedRenderScene(sceneFile)}
+                            >
+                              <span>Scene {index + 1}</span>
+                              <small>{filename}</small>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="render-frame">
+                        {selectedRenderScene ? (
+                          <img
+                            src={`${API_URL}/api/render/file/${encodeURIComponent(
+                              selectedRenderScene.split(/[\\/]/).pop()
+                            )}`}
+                            alt="Rendered scene preview"
+                          />
+                        ) : (
+                          <div className="render-empty">
+                            Select a rendered scene.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="render-empty">
+                    Click <strong>Render Preview</strong> to generate scene previews.
+                  </div>
+                )}
+              </section>
             </>
           )}
         </section>
