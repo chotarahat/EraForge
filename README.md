@@ -1,17 +1,3 @@
-Change it directly in your local repository, then commit and push it to GitHub.
-
-### 1. Open the README
-
-From PowerShell:
-
-```powershell
-cd D:\EraForge
-code README.md
-```
-
-Select **everything** inside `README.md`, delete it, and paste this:
-
-````markdown
 # EraForge
 
 ### Turn History Into Motion
