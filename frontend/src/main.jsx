@@ -133,6 +133,11 @@ function App() {
   const [plan, setPlan] = useState(null);
   const [draftPlan, setDraftPlan] = useState(null);
   const [savedPlan, setSavedPlan] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [currentProject, setCurrentProject] = useState(null);
+  const [projectName, setProjectName] = useState("");
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectError, setProjectError] = useState("");
   const [aiConfig, setAIConfig] = useState(null);
   const [assetPlan, setAssetPlan] = useState([]);
   const [narrationPlan, setNarrationPlan] = useState({
@@ -185,6 +190,40 @@ function App() {
       .then((response) => response.json())
       .then((data) => setAIConfig(data))
       .catch(() => setAIConfig(null));
+  }, []);
+
+  useEffect(() => {
+    async function initializeProjects() {
+      try {
+        const response = await fetch(`${API_URL}/api/projects`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load projects.");
+        }
+
+        const data = await response.json();
+        setProjects(data);
+
+        const savedProjectId = localStorage.getItem(
+          "eraforge_current_project"
+        );
+
+        if (
+          savedProjectId &&
+          data.some((project) => project.id === savedProjectId)
+        ) {
+          await openProject(savedProjectId);
+        } else {
+          localStorage.removeItem("eraforge_current_project");
+        }
+      } catch (err) {
+        setProjectError(
+          err.message || "Failed to initialize projects."
+        );
+      }
+    }
+
+    initializeProjects();
   }, []);
 
   useEffect(() => {
@@ -1038,6 +1077,210 @@ function App() {
     );
   }
 
+  function rememberProject(projectId) {
+    if (projectId) {
+      localStorage.setItem("eraforge_current_project", projectId);
+    } else {
+      localStorage.removeItem("eraforge_current_project");
+    }
+  }
+
+  async function loadProjects() {
+    try {
+      const response = await fetch(`${API_URL}/api/projects`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load projects.");
+      }
+
+      const data = await response.json();
+      setProjects(data);
+    } catch (err) {
+      setProjectError(err.message || "Failed to load projects.");
+    }
+  }
+
+  async function createNewProject() {
+    const name = projectName.trim() || "Untitled History";
+
+    setProjectLoading(true);
+    setProjectError("");
+
+    try {
+      const response = await fetch(`${API_URL}/api/projects`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          script,
+          duration,
+          scene_plan: draftPlan || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to create project.");
+      }
+
+      setCurrentProject(data);
+      setProjectName(data.name);
+      rememberProject(data.id);
+
+      if (data.scene_plan) {
+        const restoredPlan = structuredClone(data.scene_plan);
+        setPlan(restoredPlan);
+        setDraftPlan(restoredPlan);
+        setSavedPlan(restoredPlan);
+      }
+
+      await loadProjects();
+    } catch (err) {
+      setProjectError(err.message || "Failed to create project.");
+    } finally {
+      setProjectLoading(false);
+    }
+  }
+
+  async function saveProject() {
+    if (!currentProject || !draftPlan) return;
+
+    if (timelineErrors.length > 0) {
+      setProjectError(timelineErrors.join(" "));
+      return;
+    }
+
+    setProjectLoading(true);
+    setProjectError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/projects/${currentProject.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: projectName.trim() || currentProject.name,
+            script,
+            duration,
+            scene_plan: draftPlan,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to save project.");
+      }
+
+      setCurrentProject(data);
+      setProjectName(data.name);
+      rememberProject(data.id);
+
+      const saved = structuredClone(data.scene_plan);
+      setPlan(saved);
+      setDraftPlan(saved);
+      setSavedPlan(saved);
+
+      await loadProjects();
+    } catch (err) {
+      setProjectError(err.message || "Failed to save project.");
+    } finally {
+      setProjectLoading(false);
+    }
+  }
+
+  async function openProject(projectId) {
+    setProjectLoading(true);
+    setProjectError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/projects/${projectId}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to open project.");
+      }
+
+      setCurrentProject(data);
+      setProjectName(data.name);
+      rememberProject(data.id);
+
+      if (typeof data.script === "string") {
+        setScript(data.script);
+      }
+
+      if (typeof data.duration === "number") {
+        setDuration(data.duration);
+      }
+
+      if (data.scene_plan) {
+        const restored = structuredClone(data.scene_plan);
+        setPlan(restored);
+        setDraftPlan(restored);
+        setSavedPlan(restored);
+      } else {
+        setPlan(null);
+        setDraftPlan(null);
+        setSavedPlan(null);
+      }
+    } catch (err) {
+      setProjectError(err.message || "Failed to open project.");
+    } finally {
+      setProjectLoading(false);
+    }
+  }
+
+  async function removeProject(projectId) {
+    const confirmed = window.confirm(
+      "Delete this project permanently?"
+    );
+
+    if (!confirmed) return;
+
+    setProjectLoading(true);
+    setProjectError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/projects/${projectId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to delete project.");
+      }
+
+      if (currentProject?.id === projectId) {
+        setCurrentProject(null);
+        setProjectName("");
+        setPlan(null);
+        setDraftPlan(null);
+        setSavedPlan(null);
+        rememberProject(null);
+      }
+
+      await loadProjects();
+    } catch (err) {
+      setProjectError(err.message || "Failed to delete project.");
+    } finally {
+      setProjectLoading(false);
+    }
+  }
+
   async function generatePlan() {
     setLoading(true);
     setError("");
@@ -1110,6 +1353,111 @@ function App() {
             {loading ? "Planning scenes…" : "Generate Scene Plan"}
           </button>
           {error && <div className="error">{error}</div>}
+        </section>
+
+        <section className="panel project-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Projects</h2>
+              <p className="muted">
+                Save, reopen, and manage your history projects.
+              </p>
+            </div>
+          </div>
+
+          <div className="project-controls">
+            <input
+              type="text"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="Project name"
+              className="project-name-input"
+            />
+
+            <button
+              type="button"
+              className="primary-button"
+              onClick={createNewProject}
+              disabled={projectLoading}
+            >
+              New Project
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={saveProject}
+              disabled={projectLoading || !currentProject || !draftPlan}
+            >
+              Save Project
+            </button>
+          </div>
+
+          {currentProject && (
+            <div className="current-project">
+              Current project:
+              <strong>{currentProject.name}</strong>
+            </div>
+          )}
+
+          {currentProject && (
+            <div className="project-status">
+              Project is stored locally on this EraForge installation.
+            </div>
+          )}
+
+          {projectError && (
+            <div className="error-message">
+              {projectError}
+            </div>
+          )}
+
+          <div className="project-list">
+            {projects.length === 0 ? (
+              <div className="empty">
+                No saved projects yet.
+              </div>
+            ) : (
+              projects.map((project) => (
+                <div
+                  key={project.id}
+                  className={`project-item ${
+                    currentProject?.id === project.id
+                      ? "project-item-active"
+                      : ""
+                  }`}
+                >
+                  <div className="project-item-info">
+                    <strong>{project.name}</strong>
+                    <span>
+                      Updated{" "}
+                      {new Date(project.updated_at).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="project-item-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => openProject(project.id)}
+                      disabled={projectLoading}
+                    >
+                      Open
+                    </button>
+
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => removeProject(project.id)}
+                      disabled={projectLoading}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
         <section className="panel output-panel">

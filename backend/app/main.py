@@ -15,6 +15,13 @@ from app.render_pipeline import render_preview_bundle
 from app.scene_renderer import render_scene_to_svg
 from app.video_export import VideoExportSettings
 from app.video_pipeline import export_render_plan
+from app.project_store import (
+    create_project,
+    delete_project,
+    get_project,
+    list_projects,
+    update_project,
+)
 from app.narration import (
     LocalTTS,
     NarrationManifest,
@@ -47,6 +54,20 @@ class SubtitleSyncRequest(BaseModel):
     narration_manifest: NarrationManifest | None = None
 
 
+class ProjectCreateRequest(BaseModel):
+    name: str
+    script: str = ""
+    duration: float = 60
+    scene_plan: ScenePlan | None = None
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str | None = None
+    script: str | None = None
+    duration: float | None = None
+    scene_plan: ScenePlan | None = None
+
+
 app = FastAPI(title="EraForge API", version="0.1.0")
 
 app.add_middleware(
@@ -65,6 +86,90 @@ def health():
         "service": "eraforge-api",
         "version": "0.1.0",
         **get_provider_info(),
+    }
+
+
+@app.post("/api/projects", status_code=201)
+def project_create(payload: ProjectCreateRequest):
+    try:
+        return create_project(
+            name=payload.name,
+            script=payload.script,
+            duration=payload.duration,
+            scene_plan=payload.scene_plan,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+
+@app.get("/api/projects")
+def projects_list():
+    return list_projects()
+
+
+@app.get("/api/projects/{project_id}")
+def project_get(project_id: str):
+    project = get_project(project_id)
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found.",
+        )
+
+    return project
+
+
+@app.put("/api/projects/{project_id}")
+def project_update(
+    project_id: str,
+    payload: ProjectUpdateRequest,
+):
+    try:
+        project = update_project(
+            project_id=project_id,
+            name=payload.name,
+            script=payload.script,
+            duration=payload.duration,
+            scene_plan=payload.scene_plan,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found.",
+        )
+
+    return project
+
+
+@app.delete("/api/projects/{project_id}")
+def project_delete(project_id: str):
+    try:
+        deleted = delete_project(project_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found.",
+        )
+
+    return {
+        "deleted": True,
+        "id": project_id,
     }
 
 
