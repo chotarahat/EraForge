@@ -1907,6 +1907,12 @@ select { background: #11161d; color: #f8f5ee; border: 1px solid #343d48; border-
   margin-left: 6px;
 }
 
+.project-status {
+	margin: -6px 0 14px;
+	color: #8e98a6;
+	font-size: 12px;
+}
+
 .project-list {
   display: flex;
   flex-direction: column;
@@ -1966,4 +1972,10 @@ select { background: #11161d; color: #f8f5ee; border: 1px solid #343d48; border-
   .project-item-actions {
     width: 100%;
   }
+}
+
+.project-status {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  opacity: 0.65;
 }

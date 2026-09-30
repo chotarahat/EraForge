@@ -193,7 +193,37 @@ function App() {
   }, []);
 
   useEffect(() => {
-    loadProjects();
+    async function initializeProjects() {
+      try {
+        const response = await fetch(`${API_URL}/api/projects`);
+
+        if (!response.ok) {
+          throw new Error("Failed to load projects.");
+        }
+
+        const data = await response.json();
+        setProjects(data);
+
+        const savedProjectId = localStorage.getItem(
+          "eraforge_current_project"
+        );
+
+        if (
+          savedProjectId &&
+          data.some((project) => project.id === savedProjectId)
+        ) {
+          await openProject(savedProjectId);
+        } else {
+          localStorage.removeItem("eraforge_current_project");
+        }
+      } catch (err) {
+        setProjectError(
+          err.message || "Failed to initialize projects."
+        );
+      }
+    }
+
+    initializeProjects();
   }, []);
 
   useEffect(() => {
@@ -1047,6 +1077,14 @@ function App() {
     );
   }
 
+  function rememberProject(projectId) {
+    if (projectId) {
+      localStorage.setItem("eraforge_current_project", projectId);
+    } else {
+      localStorage.removeItem("eraforge_current_project");
+    }
+  }
+
   async function loadProjects() {
     try {
       const response = await fetch(`${API_URL}/api/projects`);
@@ -1090,6 +1128,7 @@ function App() {
 
       setCurrentProject(data);
       setProjectName(data.name);
+      rememberProject(data.id);
 
       if (data.scene_plan) {
         const restoredPlan = structuredClone(data.scene_plan);
@@ -1142,6 +1181,7 @@ function App() {
 
       setCurrentProject(data);
       setProjectName(data.name);
+      rememberProject(data.id);
 
       const saved = structuredClone(data.scene_plan);
       setPlan(saved);
@@ -1173,6 +1213,7 @@ function App() {
 
       setCurrentProject(data);
       setProjectName(data.name);
+      rememberProject(data.id);
 
       if (typeof data.script === "string") {
         setScript(data.script);
@@ -1229,6 +1270,7 @@ function App() {
         setPlan(null);
         setDraftPlan(null);
         setSavedPlan(null);
+        rememberProject(null);
       }
 
       await loadProjects();
@@ -1355,6 +1397,12 @@ function App() {
             <div className="current-project">
               Current project:
               <strong>{currentProject.name}</strong>
+            </div>
+          )}
+
+          {currentProject && (
+            <div className="project-status">
+              Project is stored locally on this EraForge installation.
             </div>
           )}
 
