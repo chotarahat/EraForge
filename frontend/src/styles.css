@@ -1477,3 +1477,103 @@ select { background: #11161d; color: #f8f5ee; border: 1px solid #343d48; border-
   color: #ffb4b4;
   background: rgba(120, 30, 30, 0.15);
 }
+
+.subtitle-sync-badge {
+	width: fit-content;
+	padding: 6px 9px;
+	border: 1px solid rgba(120, 208, 155, 0.3);
+	border-radius: 7px;
+	background: rgba(78, 176, 122, 0.08);
+	color: #9ad9b2;
+	font-size: 11px;
+}
+
+.subtitle-sync-badge {
+  padding: 6px 10px;
+  border: 1px solid #35523d;
+  border-radius: 8px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.subtitle-export {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid #2d3641;
+	border-radius: 8px;
+	background: #11161d;
+}
+
+.subtitle-export > div {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.subtitle-export strong {
+	color: #d8dde3;
+	font-size: 12px;
+}
+
+.subtitle-export small {
+	color: #8e98a6;
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+.subtitle-download {
+	flex: 0 0 auto;
+	text-decoration: none;
+}
+
+@media (max-width: 520px) {
+	.subtitle-export {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+}
+
+.subtitle-export {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid #2b3240;
+  border-radius: 10px;
+}
+
+.subtitle-export > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subtitle-export small {
+  font-size: 11px;
+  opacity: 0.6;
+  word-break: break-all;
+}
+
+.subtitle-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .subtitle-export {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .subtitle-download {
+    width: 100%;
+  }
+}

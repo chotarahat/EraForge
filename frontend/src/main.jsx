@@ -142,6 +142,7 @@ function App() {
     cues: [],
   });
   const [subtitleSrt, setSubtitleSrt] = useState("");
+  const [subtitleOutputFile, setSubtitleOutputFile] = useState("");
   const [subtitleLoading, setSubtitleLoading] = useState(false);
   const [subtitleError, setSubtitleError] = useState("");
   const [narrationManifest, setNarrationManifest] = useState({
@@ -351,6 +352,29 @@ function App() {
     setSubtitleError("");
 
     try {
+      let narrationManifestData = null;
+
+      if (narrationPlan?.segments?.length) {
+        const manifestResponse = await fetch(
+          `${API_URL}/api/narration/manifest`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              plan,
+              narration: narrationPlan,
+            }),
+          }
+        );
+
+        if (manifestResponse.ok) {
+          narrationManifestData =
+            await manifestResponse.json();
+        }
+      }
+
       const response = await fetch(
         `${API_URL}/api/subtitles/plan`,
         {
@@ -363,7 +387,9 @@ function App() {
       );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response
+          .json()
+          .catch(() => ({}));
 
         throw new Error(
           errorData.detail ||
@@ -387,7 +413,9 @@ function App() {
       );
 
       if (!srtResponse.ok) {
-        const errorData = await srtResponse.json().catch(() => ({}));
+        const errorData = await srtResponse
+          .json()
+          .catch(() => ({}));
 
         throw new Error(
           errorData.detail ||
@@ -397,10 +425,43 @@ function App() {
 
       const srtData = await srtResponse.json();
 
-      setSubtitleSrt(srtData.srt || "");
+      setSubtitleSrt(
+        srtData.srt || ""
+      );
+
+      if (narrationManifestData) {
+        const syncResponse = await fetch(
+          `${API_URL}/api/subtitles/sync`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              plan,
+              narration_manifest:
+                narrationManifestData,
+            }),
+          }
+        );
+
+        if (syncResponse.ok) {
+          const syncData =
+            await syncResponse.json();
+
+          if (!syncData.valid) {
+            setSubtitleError(
+              syncData.issues
+                .map((issue) => issue.message)
+                .join(" ")
+            );
+          }
+        }
+      }
     } catch (error) {
       setSubtitleError(
-        error.message || "Failed to generate subtitles"
+        error.message ||
+          "Failed to generate subtitles"
       );
     } finally {
       setSubtitleLoading(false);
@@ -435,6 +496,7 @@ function App() {
       const data = await response.json();
 
       setSubtitleSrt(data.srt || "");
+      setSubtitleOutputFile(data.output_file || "");
 
       const trackResponse = await fetch(
         `${API_URL}/api/subtitles/plan`,
@@ -1980,6 +2042,10 @@ function App() {
                       </span>
                     </div>
 
+                    <div className="subtitle-sync-badge">
+                      Narration-aware synchronization enabled
+                    </div>
+
                     <div className="subtitle-cue-list">
                       {subtitleTrack.cues.map((cue) => (
                         <div
@@ -2006,13 +2072,35 @@ function App() {
                     </div>
 
                     {subtitleSrt && (
-                      <div className="subtitle-srt-preview">
-                        <div className="subtitle-srt-header">
-                          <strong>SRT Preview</strong>
-                        </div>
+                      <>
+                        {subtitleOutputFile && (
+                          <div className="subtitle-export">
+                            <div>
+                              <strong>Subtitle File</strong>
 
-                        <pre>{subtitleSrt}</pre>
-                      </div>
+                              <small>
+                                {subtitleOutputFile.split(/[\\/]/).pop()}
+                              </small>
+                            </div>
+
+                            <a
+                              className="secondary-button subtitle-download"
+                              href={`${API_URL}/api/subtitles/file/subtitles.srt`}
+                              download="subtitles.srt"
+                            >
+                              Download SRT
+                            </a>
+                          </div>
+                        )}
+
+                        <div className="subtitle-srt-preview">
+                          <div className="subtitle-srt-header">
+                            <strong>SRT Preview</strong>
+                          </div>
+
+                          <pre>{subtitleSrt}</pre>
+                        </div>
+                      </>
                     )}
                   </div>
                 ) : (
