@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,12 @@ from app.renderer import RenderPlan, SceneRenderPlan
 from app.renderer_planner import build_render_plan
 from app.render_pipeline import render_preview_bundle
 from app.scene_renderer import render_scene_to_svg
+from app.narration import (
+    NarrationPlan,
+    NarrationSettings,
+    build_narration_plan,
+    generate_narration,
+)
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
 from .ai.factory import get_provider_info
@@ -64,6 +71,34 @@ def create_asset_plan(plan: ScenePlan):
 )
 def create_geography_plan(plan: ScenePlan):
     return build_geography_manifest(plan)
+
+
+@app.post("/api/narration/plan", response_model=NarrationPlan)
+def narration_plan(plan: ScenePlan):
+    return build_narration_plan(plan)
+
+
+@app.post("/api/narration/generate", response_model=NarrationPlan)
+def narration_generate(payload: dict[str, Any]):
+    settings_data = payload.pop("_narration_settings", None)
+
+    plan = ScenePlan.model_validate(payload)
+
+    narration = build_narration_plan(plan)
+
+    if not narration.segments:
+        return narration
+
+    settings = (
+        NarrationSettings(**settings_data)
+        if isinstance(settings_data, dict)
+        else None
+    )
+
+    return generate_narration(
+        narration,
+        settings=settings,
+    )
 
 
 @app.post(
