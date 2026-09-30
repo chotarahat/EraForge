@@ -1,5 +1,5 @@
 # EraForge
-
+![EraForge Interface](docs/screenshots/EraForge UI.png)
 ### Turn History Into Motion
 
 EraForge is an open-source, local-first AI-assisted application for turning historical scripts into editable animated educational videos.
