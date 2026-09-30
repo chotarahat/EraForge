@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .models import PlanRequest
+from .models import PlanRequest, ScenePlan
 from .planner import create_plan
 from .ai.factory import get_provider_info
 
@@ -34,3 +34,9 @@ def plan(request: PlanRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Scene planning failed: {exc}") from exc
+@app.post("/api/validate-plan")
+def validate_plan(plan: ScenePlan):
+    return {
+        "valid": True,
+        "plan": plan.model_dump(),
+    }

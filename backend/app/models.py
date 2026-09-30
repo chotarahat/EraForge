@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Scene(BaseModel):
@@ -23,6 +23,47 @@ class ScenePlan(BaseModel):
     aspect_ratio: Literal["9:16", "16:9", "1:1"]
     style: str
     scenes: list[Scene]
+
+    @model_validator(mode="after")
+    def validate_timeline(self):
+        if not self.scenes:
+            raise ValueError("Scene plan must contain at least one scene.")
+
+        if self.total_duration <= 0:
+            raise ValueError("Total duration must be greater than zero.")
+
+        previous_end = 0.0
+
+        for index, scene in enumerate(self.scenes):
+            if scene.start < 0:
+                raise ValueError(
+                    f"Scene {index + 1} starts before 0 seconds."
+                )
+
+            if scene.end <= scene.start:
+                raise ValueError(
+                    f"Scene {index + 1} must have a positive duration."
+                )
+
+            if scene.start < previous_end - 0.01:
+                raise ValueError(
+                    f"Scene {index + 1} overlaps the previous scene."
+                )
+
+            if scene.start > previous_end + 0.01:
+                raise ValueError(
+                    f"Scene {index + 1} creates a timeline gap."
+                )
+
+            previous_end = scene.end
+
+        if abs(previous_end - self.total_duration) > 0.01:
+            raise ValueError(
+                f"Timeline ends at {previous_end:.3f}s but total duration "
+                f"is {self.total_duration:.3f}s."
+            )
+
+        return self
 
 
 class PlanRequest(BaseModel):
