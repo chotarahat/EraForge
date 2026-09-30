@@ -22,6 +22,11 @@ from app.narration import (
     build_narration_plan,
     generate_narration,
 )
+from app.subtitles import (
+    SubtitleTrack,
+    build_subtitle_track,
+    subtitle_track_to_srt,
+)
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
 from .ai.factory import get_provider_info
@@ -81,6 +86,24 @@ def create_asset_plan(plan: ScenePlan):
 )
 def create_geography_plan(plan: ScenePlan):
     return build_geography_manifest(plan)
+
+
+@app.post(
+    "/api/subtitles/plan",
+    response_model=SubtitleTrack,
+)
+def subtitle_plan(plan: ScenePlan):
+    return build_subtitle_track(plan)
+
+
+@app.post("/api/subtitles/srt")
+def subtitle_srt(plan: ScenePlan):
+    track = build_subtitle_track(plan)
+
+    return {
+        "cue_count": len(track.cues),
+        "srt": subtitle_track_to_srt(track),
+    }
 
 
 @app.post("/api/narration/plan", response_model=NarrationPlan)
