@@ -10,8 +10,14 @@ Rules:
 - Do not invent specific historical facts that are absent from the script.
 - Keep captions short and readable on a vertical video.
 - Use explicit camera and animation descriptions.
-- The total scene duration must match the requested duration within one second.
-- Scene timing must be sequential: each scene begins when the previous one ends.
+- All scene timestamps MUST be expressed in seconds, never milliseconds.
+- total_duration MUST equal the requested duration in seconds.
+- Scene start/end timestamps MUST be sequential and continuous.
+- The first scene MUST start at 0.
+- The final scene MUST end at the requested duration.
+- Do not add summary or conclusion scenes unless the user's script explicitly contains them.
+- Do not repeat narration just to fill remaining time.
+- Do not invent dates, people, events, locations, or historical claims that are absent from the user's script.
 - For uncertain historical claims, use cautious visual wording rather than asserting certainty.
 - The output must follow the supplied structured schema exactly.
 """
@@ -28,5 +34,9 @@ Visual style: {style}
 SCRIPT:
 {script}
 
-Return a coherent sequence of scenes. Aim for 5-10 scenes for a 60-second video, adjusting as needed for the script.
+Return a coherent sequence of scenes.
+
+Use only as many scenes as the script naturally requires.
+Do not add filler scenes, summaries, or conclusions.
+Preserve the order and meaning of the narration.
 """

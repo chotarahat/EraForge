@@ -6,13 +6,137 @@ const API_URL = "http://127.0.0.1:8000";
 
 const defaultScript = `Before Bangladesh...\nbefore Bengal...\nbefore humans ever walked this land...\n\nMillions of years ago, the region we now call Bangladesh was part of a constantly changing geological world.`;
 
+const MIN_SCENE_DURATION = 0.1;
+
+function normalizeTimeline(scenes, targetDuration) {
+  if (!scenes.length) return [];
+
+  const durations = scenes.map((scene) => {
+    const start = Number(scene.start);
+    const end = Number(scene.end);
+
+    return Math.max(end - start, MIN_SCENE_DURATION);
+  });
+
+  let total = durations.reduce((sum, value) => sum + value, 0);
+
+  if (total < targetDuration) {
+    durations[durations.length - 1] += targetDuration - total;
+    total = targetDuration;
+  }
+
+  if (total > targetDuration) {
+    let excess = total - targetDuration;
+
+    for (let i = durations.length - 1; i >= 0 && excess > 0; i -= 1) {
+      const reducible = Math.max(
+        durations[i] - MIN_SCENE_DURATION,
+        0
+      );
+
+      const reduction = Math.min(reducible, excess);
+
+      durations[i] -= reduction;
+      excess -= reduction;
+    }
+
+    if (excess > 0) {
+      const minimumTotal =
+        scenes.length * MIN_SCENE_DURATION;
+
+      if (targetDuration < minimumTotal) {
+        throw new Error(
+          `Video duration is too short for ${scenes.length} scenes.`
+        );
+      }
+
+      const scale =
+        (targetDuration - minimumTotal) /
+        (total - minimumTotal);
+
+      for (let i = 0; i < durations.length; i += 1) {
+        durations[i] =
+          MIN_SCENE_DURATION +
+          (durations[i] - MIN_SCENE_DURATION) * scale;
+      }
+    }
+  }
+
+  let currentTime = 0;
+
+  return scenes.map((scene, index) => {
+    const start = currentTime;
+    const end =
+      index === scenes.length - 1
+        ? targetDuration
+        : currentTime + durations[index];
+
+    currentTime = end;
+
+    return {
+      ...scene,
+      start: Number(start.toFixed(3)),
+      end: Number(end.toFixed(3)),
+    };
+  });
+}
+
+function validateTimeline(plan) {
+  if (!plan || !plan.scenes?.length) {
+    return ["No scenes available."];
+  }
+
+  const errors = [];
+  const targetDuration = Number(plan.total_duration);
+
+  let previousEnd = 0;
+
+  plan.scenes.forEach((scene, index) => {
+    const start = Number(scene.start);
+    const end = Number(scene.end);
+
+    if (start < 0) {
+      errors.push(`Scene ${index + 1} starts before 0 seconds.`);
+    }
+
+    if (end <= start) {
+      errors.push(
+        `Scene ${index + 1} has an invalid duration.`
+      );
+    }
+
+    if (Math.abs(start - previousEnd) > 0.01) {
+      errors.push(
+        `Scene ${index + 1} creates a gap or overlap.`
+      );
+    }
+
+    previousEnd = end;
+  });
+
+  if (Math.abs(previousEnd - targetDuration) > 0.01) {
+    errors.push(
+      `Timeline ends at ${previousEnd.toFixed(
+        2
+      )}s instead of ${targetDuration.toFixed(2)}s.`
+    );
+  }
+
+  return errors;
+}
+
 function App() {
   const [script, setScript] = useState(defaultScript);
   const [duration, setDuration] = useState(60);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [plan, setPlan] = useState(null);
+  const [draftPlan, setDraftPlan] = useState(null);
+  const [savedPlan, setSavedPlan] = useState(null);
   const [aiConfig, setAIConfig] = useState(null);
+  const timelineErrors = draftPlan
+    ? validateTimeline(draftPlan)
+    : [];
 
   useEffect(() => {
     fetch(`${API_URL}/api/health`)
@@ -20,11 +144,361 @@ function App() {
       .then((data) => setAIConfig(data))
       .catch(() => setAIConfig(null));
   }, []);
+  
+  function updateScene(sceneId, field, value) {
+    setDraftPlan((current) => {
+      if (!current) return current;
+
+      const targetDuration = Number(current.total_duration);
+
+      if (field !== "start" && field !== "end") {
+        return {
+          ...current,
+          scenes: current.scenes.map((scene) =>
+            scene.id === sceneId
+              ? {
+                  ...scene,
+                  [field]:
+                    field === "asset_hints"
+                      ? value
+                      : value,
+                }
+              : scene
+          ),
+        };
+      }
+
+      const index = current.scenes.findIndex(
+        (scene) => scene.id === sceneId
+      );
+
+      if (index === -1) return current;
+
+      const scenes = current.scenes.map((scene) => ({
+        ...scene,
+      }));
+
+      const scene = scenes[index];
+
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        return current;
+      }
+
+      if (field === "start") {
+        const minimumStart =
+          index === 0
+            ? 0
+            : Number(scenes[index - 1].start) + MIN_SCENE_DURATION;
+
+        const maximumStart =
+          Number(scene.end) - MIN_SCENE_DURATION;
+
+        const newStart = Math.min(
+          Math.max(numericValue, minimumStart),
+          maximumStart
+        );
+
+        scene.start = newStart;
+
+        if (index > 0) {
+          scenes[index - 1].end = newStart;
+        }
+      }
+
+      if (field === "end") {
+        const minimumEnd =
+          Number(scene.start) + MIN_SCENE_DURATION;
+
+        const newEnd = Math.min(
+          Math.max(numericValue, minimumEnd),
+          targetDuration
+        );
+
+        scene.end = newEnd;
+      }
+
+      return {
+        ...current,
+        scenes: normalizeTimeline(
+          scenes,
+          targetDuration
+        ),
+      };
+    });
+  }
+
+  function resequenceScenes(scenes) {
+    let currentTime = 0;
+
+    return scenes.map((scene) => {
+      const rawDuration = Number(scene.end) - Number(scene.start);
+      const sceneDuration = Math.max(rawDuration, 0.1);
+
+      const updatedScene = {
+        ...scene,
+        start: Number(currentTime.toFixed(3)),
+        end: Number((currentTime + sceneDuration).toFixed(3)),
+      };
+
+      currentTime += sceneDuration;
+
+      return updatedScene;
+    });
+  }
+
+  function deleteScene(sceneId) {
+    setDraftPlan((current) => {
+      if (!current || current.scenes.length <= 1) {
+        return current;
+      }
+
+      const index = current.scenes.findIndex(
+        (scene) => scene.id === sceneId
+      );
+
+      if (index === -1) return current;
+
+      const removedScene = current.scenes[index];
+      const remaining = current.scenes.filter(
+        (scene) => scene.id !== sceneId
+      );
+
+      if (remaining.length === 0) {
+        return current;
+      }
+
+      // Give the removed scene's duration to the next scene.
+      const removedDuration =
+        Number(removedScene.end) - Number(removedScene.start);
+
+      const targetIndex =
+        index < remaining.length ? index : remaining.length - 1;
+
+      const updated = remaining.map((scene, i) => {
+        if (i !== targetIndex) return scene;
+
+        return {
+          ...scene,
+          end: Number(
+            (Number(scene.end) + Math.max(removedDuration, 0)).toFixed(3)
+          ),
+        };
+      });
+
+      return {
+        ...current,
+        scenes: resequenceScenes(updated),
+      };
+    });
+  }
+
+  function duplicateScene(sceneId) {
+    setDraftPlan((current) => {
+      if (!current) return current;
+
+      const index = current.scenes.findIndex(
+        (scene) => scene.id === sceneId
+      );
+
+      if (index === -1) return current;
+
+      const original = current.scenes[index];
+
+      const originalDuration =
+        Number(original.end) - Number(original.start);
+
+      const duration = Math.max(originalDuration, 0.2);
+      const halfDuration = duration / 2;
+
+      const first = {
+        ...original,
+        end: original.start + halfDuration,
+      };
+
+      const duplicate = {
+        ...structuredClone(original),
+        id: `${original.id}-copy-${Date.now()}`,
+        start: original.start + halfDuration,
+        end: original.end,
+        title: `${original.title} (Copy)`,
+      };
+
+      const scenes = [...current.scenes];
+
+      scenes.splice(index, 1, first, duplicate);
+
+      return {
+        ...current,
+        scenes: resequenceScenes(scenes),
+      };
+    });
+  }
+
+  function moveScene(sceneId, direction) {
+    setDraftPlan((current) => {
+      if (!current) return current;
+
+      const index = current.scenes.findIndex(
+        (scene) => scene.id === sceneId
+      );
+
+      if (index === -1) return current;
+
+      const newIndex = index + direction;
+
+      if (newIndex < 0 || newIndex >= current.scenes.length) {
+        return current;
+      }
+
+      const scenes = [...current.scenes];
+
+      [scenes[index], scenes[newIndex]] = [
+        scenes[newIndex],
+        scenes[index],
+      ];
+
+      return {
+        ...current,
+        scenes: resequenceScenes(scenes),
+      };
+    });
+  }
+
+  function addScene() {
+    setDraftPlan((current) => {
+      if (!current) return current;
+
+      const scenes = current.scenes;
+
+      if (scenes.length === 0) {
+        return current;
+      }
+
+      // Split the longest scene so the total video duration stays unchanged.
+      let longestIndex = 0;
+      let longestDuration = -1;
+
+      scenes.forEach((scene, index) => {
+        const duration =
+          Number(scene.end) - Number(scene.start);
+
+        if (duration > longestDuration) {
+          longestDuration = duration;
+          longestIndex = index;
+        }
+      });
+
+      const original = scenes[longestIndex];
+      const duration = Math.max(
+        Number(original.end) - Number(original.start),
+        0.2
+      );
+
+      const halfDuration = duration / 2;
+
+      const first = {
+        ...original,
+        end: original.start + halfDuration,
+      };
+
+      const second = {
+        ...structuredClone(original),
+        id: `scene-${Date.now()}`,
+        start: original.start + halfDuration,
+        end: original.end,
+        title: "New Scene",
+        narration: "",
+        visual: "",
+        animation: "",
+        camera: "",
+        caption: "",
+        location: "",
+        asset_hints: [],
+      };
+
+      const updated = [...scenes];
+
+      updated.splice(longestIndex, 1, first, second);
+
+      return {
+        ...current,
+        scenes: resequenceScenes(updated),
+      };
+    });
+  }
+
+  async function applyChanges() {
+    if (!draftPlan) return;
+
+    if (timelineErrors.length > 0) {
+      setError(timelineErrors.join(" "));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/validate-plan",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(draftPlan),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail =
+          Array.isArray(data.detail)
+            ? data.detail
+                .map((item) => item.msg)
+                .join("; ")
+            : data.detail || "Scene plan validation failed.";
+
+        throw new Error(detail);
+      }
+
+      const applied = structuredClone(data.plan);
+
+      setSavedPlan(applied);
+      setPlan(applied);
+      setDraftPlan(applied);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Failed to validate scene plan.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetChanges() {
+    if (!savedPlan) return;
+
+    const restored = structuredClone(savedPlan);
+
+    setDraftPlan(restored);
+    setError("");
+  }
+
+  function hasUnsavedChanges() {
+    if (!draftPlan || !savedPlan) return false;
+
+    return (
+      JSON.stringify(draftPlan) !==
+      JSON.stringify(savedPlan)
+    );
+  }
 
   async function generatePlan() {
     setLoading(true);
     setError("");
-    setPlan(null);
 
     try {
       const response = await fetch(`${API_URL}/api/plan`, {
@@ -40,7 +514,11 @@ function App() {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Scene planning failed");
-      setPlan(data);
+      const initialPlan = structuredClone(data);
+
+      setPlan(initialPlan);
+      setDraftPlan(initialPlan);
+      setSavedPlan(initialPlan);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -94,24 +572,256 @@ function App() {
               <h2>Scene Timeline</h2>
               <p className="muted">AI-generated storyboard for the renderer.</p>
             </div>
-            {plan && <span className="pill">{plan.scenes.length} scenes</span>}
+            {draftPlan && <span className="pill">{draftPlan.scenes.length} scenes</span>}
           </div>
 
-          {!plan ? (
+          {!draftPlan ? (
             <div className="empty">Your generated scene plan will appear here.</div>
           ) : (
-            <div className="timeline">
-              {plan.scenes.map((scene) => (
+            <>
+              <div className="timeline-toolbar">
+                <div className="toolbar-left">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={addScene}
+                  >
+                    + Add Scene
+                  </button>
+
+                  <span className="timeline-info">
+                    {draftPlan.scenes.length} scenes ·{" "}
+                    {draftPlan.total_duration.toFixed(1)}s
+                  </span>
+                </div>
+
+                <div className="toolbar-right">
+                  {hasUnsavedChanges() && (
+                    <span className="unsaved-label">
+                      Unsaved changes
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={resetChanges}
+                    disabled={!hasUnsavedChanges()}
+                  >
+                    Reset
+                  </button>
+
+                  <button
+                    type="button"
+                    className="primary-small-button"
+                    onClick={applyChanges}
+                    disabled={
+                      !hasUnsavedChanges() ||
+                      timelineErrors.length > 0
+                    }
+                  >
+                    Apply Changes
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className={
+                  timelineErrors.length === 0
+                    ? "timeline-status valid"
+                    : "timeline-status invalid"
+                }
+              >
+                {timelineErrors.length === 0 ? (
+                  <>
+                    <span className="status-dot" />
+                    Timeline valid ·{" "}
+                    {draftPlan.total_duration.toFixed(1)}s
+                    {hasUnsavedChanges() && " · unsaved"}
+                  </>
+                ) : (
+                  <>
+                    Timeline has {timelineErrors.length} issue
+                    {timelineErrors.length !== 1 ? "s" : ""}
+                  </>
+                )}
+              </div>
+
+              <div className="timeline">
+                {draftPlan.scenes.map((scene, index) => (
                 <article className="scene" key={scene.id}>
-                  <div className="scene-time">{scene.start.toFixed(1)}s → {scene.end.toFixed(1)}s</div>
-                  <h3>{scene.title}</h3>
-                  <p><strong>Visual:</strong> {scene.visual}</p>
-                  <p><strong>Animation:</strong> {scene.animation}</p>
-                  <p><strong>Camera:</strong> {scene.camera}</p>
-                  <div className="caption">{scene.caption}</div>
+                  <div className="scene-header">
+                    <div>
+                      <div className="scene-number">SCENE {index + 1}</div>
+                      <div className="scene-time">
+                        {scene.start.toFixed(1)}s → {scene.end.toFixed(1)}s
+                      </div>
+                    </div>
+
+                    <div className="scene-actions">
+                      <button
+                        type="button"
+                        className="scene-action"
+                        onClick={() => moveScene(scene.id, -1)}
+                        disabled={index === 0}
+                        title="Move scene up"
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        type="button"
+                        className="scene-action"
+                        onClick={() => moveScene(scene.id, 1)}
+                        disabled={index === draftPlan.scenes.length - 1}
+                        title="Move scene down"
+                      >
+                        ↓
+                      </button>
+
+                      <button
+                        type="button"
+                        className="scene-action"
+                        onClick={() => duplicateScene(scene.id)}
+                        title="Duplicate scene"
+                      >
+                        ⧉
+                      </button>
+
+                      <button
+                        type="button"
+                        className="scene-action danger"
+                        onClick={() => deleteScene(scene.id)}
+                        disabled={draftPlan.scenes.length <= 1}
+                        title="Delete scene"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+
+                  <label>
+                    Title
+                    <input
+                      value={scene.title}
+                      onChange={(e) =>
+                        updateScene(scene.id, "title", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <div className="time-fields">
+                    <label>
+                      Start
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={scene.start}
+                        onChange={(e) =>
+                          updateScene(scene.id, "start", e.target.value)
+                        }
+                      />
+                    </label>
+
+                    <label>
+                      End
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={scene.end}
+                        onChange={(e) =>
+                          updateScene(scene.id, "end", e.target.value)
+                        }
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Narration
+                    <textarea
+                      className="scene-textarea"
+                      value={scene.narration}
+                      onChange={(e) =>
+                        updateScene(scene.id, "narration", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Visual
+                    <textarea
+                      className="scene-textarea"
+                      value={scene.visual}
+                      onChange={(e) =>
+                        updateScene(scene.id, "visual", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Animation
+                    <textarea
+                      className="scene-textarea"
+                      value={scene.animation}
+                      onChange={(e) =>
+                        updateScene(scene.id, "animation", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Camera
+                    <textarea
+                      className="scene-textarea"
+                      value={scene.camera}
+                      onChange={(e) =>
+                        updateScene(scene.id, "camera", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Caption
+                    <input
+                      value={scene.caption}
+                      onChange={(e) =>
+                        updateScene(scene.id, "caption", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Location
+                    <input
+                      value={scene.location || ""}
+                      onChange={(e) =>
+                        updateScene(scene.id, "location", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Asset Hints
+                    <input
+                      value={scene.asset_hints.join(", ")}
+                      onChange={(e) =>
+                        updateScene(
+                          scene.id,
+                          "asset_hints",
+                          e.target.value
+                            .split(",")
+                            .map((item) => item.trim())
+                            .filter(Boolean)
+                        )
+                      }
+                    />
+                  </label>
                 </article>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </section>
       </main>
