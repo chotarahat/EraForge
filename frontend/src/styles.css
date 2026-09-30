@@ -1153,3 +1153,82 @@ select { background: #11161d; color: #f8f5ee; border: 1px solid #343d48; border-
     grid-template-columns: 1fr;
   }
 }
+
+.narration-sync-status {
+  grid-column: 1 / -1;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #2b3240;
+  border-radius: 10px;
+}
+
+.narration-sync-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.narration-sync-header span {
+	font-size: 12px;
+	opacity: 0.65;
+}
+
+.narration-sync-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.narration-sync-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+	padding: 10px 12px;
+	border: 1px solid #2b3240;
+	border-radius: 8px;
+}
+
+.narration-sync-item.valid {
+	border-color: #35523d;
+}
+
+.narration-sync-item.warning {
+	border-color: #6b5732;
+}
+
+.narration-sync-item > div:first-child {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.narration-sync-item small {
+	opacity: 0.6;
+}
+
+.narration-sync-duration {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	font-size: 12px;
+}
+
+.narration-sync-item.warning
+  .narration-sync-duration span:last-child {
+	opacity: 0.85;
+}
+
+@media (max-width: 700px) {
+	.narration-sync-item {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.narration-sync-duration {
+		align-items: flex-start;
+	}
+}

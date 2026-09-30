@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from app.asset_manifest import build_asset_manifest, resolve_asset_manifest
 from app.assets import AssetDefinition, AssetResolutionResult
 from app.geography import GeographyPlan
@@ -13,14 +14,23 @@ from app.renderer_planner import build_render_plan
 from app.render_pipeline import render_preview_bundle
 from app.scene_renderer import render_scene_to_svg
 from app.narration import (
+    LocalTTS,
+    NarrationManifest,
     NarrationPlan,
     NarrationSettings,
+    build_narration_manifest,
     build_narration_plan,
     generate_narration,
 )
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
 from .ai.factory import get_provider_info
+
+
+class NarrationManifestRequest(BaseModel):
+    plan: ScenePlan
+    narration: NarrationPlan
+
 
 app = FastAPI(title="EraForge API", version="0.1.0")
 
@@ -78,6 +88,19 @@ def narration_plan(plan: ScenePlan):
     return build_narration_plan(plan)
 
 
+@app.post(
+    "/api/narration/manifest",
+    response_model=NarrationManifest,
+)
+def narration_manifest(
+    request: NarrationManifestRequest,
+):
+    return build_narration_manifest(
+        request.plan,
+        request.narration,
+    )
+
+
 @app.post("/api/narration/generate", response_model=NarrationPlan)
 def narration_generate(payload: dict[str, Any]):
     settings_data = payload.pop("_narration_settings", None)
@@ -98,6 +121,31 @@ def narration_generate(payload: dict[str, Any]):
     return generate_narration(
         narration,
         settings=settings,
+    )
+
+
+@app.get("/api/narration/voices")
+def narration_voices():
+    return {
+        "voices": LocalTTS().list_voices()
+    }
+
+
+@app.get("/api/narration/file/{filename}")
+def narration_file(filename: str):
+    output_dir = Path("backend/outputs/narration")
+    file_path = output_dir / Path(filename).name
+
+    if not file_path.exists() or file_path.suffix.lower() != ".wav":
+        raise HTTPException(
+            status_code=404,
+            detail="Narration file not found",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="audio/wav",
+        filename=file_path.name,
     )
 
 

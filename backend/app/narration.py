@@ -17,6 +17,22 @@ class NarrationPlan(BaseModel):
     segments: list[NarrationSegment] = Field(default_factory=list)
 
 
+class NarrationManifestSegment(BaseModel):
+    scene_id: str
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    text: str
+    audio_file: str | None = None
+    audio_duration: float = Field(default=0.0, ge=0)
+    fits_scene: bool = True
+
+
+class NarrationManifest(BaseModel):
+    segments: list[NarrationManifestSegment] = Field(
+        default_factory=list
+    )
+
+
 class NarrationSettings(BaseModel):
     voice: str | None = None
     rate: int = Field(default=170, ge=80, le=300)
@@ -40,6 +56,42 @@ def build_narration_plan(plan: ScenePlan) -> NarrationPlan:
         )
 
     return NarrationPlan(segments=segments)
+
+
+def build_narration_manifest(
+    plan: ScenePlan,
+    narration: NarrationPlan,
+) -> NarrationManifest:
+    narration_by_scene = {
+        segment.scene_id: segment
+        for segment in narration.segments
+    }
+
+    segments: list[NarrationManifestSegment] = []
+
+    for scene in plan.scenes:
+        segment = narration_by_scene.get(scene.id)
+
+        if segment is None:
+            continue
+
+        scene_duration = scene.end - scene.start
+
+        segments.append(
+            NarrationManifestSegment(
+                scene_id=scene.id,
+                start=scene.start,
+                end=scene.end,
+                text=segment.text,
+                audio_file=segment.audio_file,
+                audio_duration=segment.duration_seconds,
+                fits_scene=(
+                    segment.duration_seconds <= scene_duration
+                ),
+            )
+        )
+
+    return NarrationManifest(segments=segments)
 
 
 def _wav_duration(path: Path) -> float:
@@ -80,18 +132,37 @@ class LocalTTS:
     def synthesize(self, text: str, output_path: Path) -> float:
         import pyttsx3
 
+        text = text.strip()
+
+        if not text:
+            raise ValueError("Narration text cannot be empty")
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         engine = pyttsx3.init()
 
         try:
-            engine.setProperty("rate", self.settings.rate)
-            engine.setProperty("volume", self.settings.volume)
+            engine.setProperty(
+                "rate",
+                self.settings.rate,
+            )
+
+            engine.setProperty(
+                "volume",
+                self.settings.volume,
+            )
 
             if self.settings.voice:
-                engine.setProperty("voice", self.settings.voice)
+                engine.setProperty(
+                    "voice",
+                    self.settings.voice,
+                )
 
-            engine.save_to_file(text, str(output_path))
+            engine.save_to_file(
+                text,
+                str(output_path),
+            )
+
             engine.runAndWait()
         finally:
             engine.stop()
@@ -101,7 +172,14 @@ class LocalTTS:
                 f"TTS engine did not create output file: {output_path}"
             )
 
-        return _wav_duration(output_path)
+        duration = _wav_duration(output_path)
+
+        if duration <= 0:
+            raise RuntimeError(
+                f"Generated narration has invalid duration: {output_path}"
+            )
+
+        return duration
 
 
 def generate_narration(
