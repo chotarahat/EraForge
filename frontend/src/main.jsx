@@ -138,6 +138,11 @@ function App() {
   const [narrationPlan, setNarrationPlan] = useState({
     segments: [],
   });
+  const [narrationManifest, setNarrationManifest] = useState({
+    segments: [],
+  });
+  const [narrationManifestLoading, setNarrationManifestLoading] =
+    useState(false);
   const [narrationVoices, setNarrationVoices] = useState([]);
   const [selectedNarrationVoice, setSelectedNarrationVoice] = useState("");
   const [narrationRate, setNarrationRate] = useState(170);
@@ -324,12 +329,61 @@ function App() {
       if (data.segments?.length) {
         setSelectedNarrationScene(data.segments[0].scene_id);
       }
+
+      await syncNarrationManifest(data);
     } catch (error) {
       setNarrationError(
         error.message || "Failed to generate narration"
       );
     } finally {
       setNarrationLoading(false);
+    }
+  }
+
+  async function syncNarrationManifest(narrationData = narrationPlan) {
+    if (!plan?.scenes?.length || !narrationData?.segments?.length) {
+      setNarrationManifest({
+        segments: [],
+      });
+      return;
+    }
+
+    setNarrationManifestLoading(true);
+    setNarrationError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/narration/manifest`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan,
+            narration: narrationData,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.detail ||
+            `Narration sync failed (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      setNarrationManifest(data);
+    } catch (error) {
+      setNarrationError(
+        error.message || "Failed to sync narration timeline"
+      );
+    } finally {
+      setNarrationManifestLoading(false);
     }
   }
 
@@ -1593,6 +1647,20 @@ function App() {
                       ? "Generating..."
                       : "Generate Audio"}
                   </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => syncNarrationManifest()}
+                    disabled={
+                      narrationManifestLoading ||
+                      !narrationPlan.segments.length
+                    }
+                  >
+                    {narrationManifestLoading
+                      ? "Syncing..."
+                      : "Sync Timeline"}
+                  </button>
                 </div>
 
                 {narrationPlan.segments.length > 0 ? (
@@ -1659,6 +1727,57 @@ function App() {
                           </div>
                         );
                       })()}
+                    </div>
+
+                    <div className="narration-sync-status">
+                      <div className="narration-sync-header">
+                        <strong>Timeline Sync</strong>
+
+                        <span>
+                          {narrationManifest.segments.length} synced scene
+                          {narrationManifest.segments.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+
+                      {narrationManifest.segments.length > 0 ? (
+                        <div className="narration-sync-list">
+                          {narrationManifest.segments.map((segment) => (
+                            <div
+                              key={segment.scene_id}
+                              className={
+                                segment.fits_scene
+                                  ? "narration-sync-item valid"
+                                  : "narration-sync-item warning"
+                              }
+                            >
+                              <div>
+                                <strong>{segment.scene_id}</strong>
+
+                                <small>
+                                  Scene {segment.start.toFixed(2)}s →{" "}
+                                  {segment.end.toFixed(2)}s
+                                </small>
+                              </div>
+
+                              <div className="narration-sync-duration">
+                                <span>
+                                  Audio {segment.audio_duration.toFixed(2)}s
+                                </span>
+
+                                <span>
+                                  {segment.fits_scene
+                                    ? "Fits scene"
+                                    : "Longer than scene"}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="narration-empty">
+                          Generate narration and sync the timeline.
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
