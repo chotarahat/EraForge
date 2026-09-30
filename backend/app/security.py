@@ -9,13 +9,24 @@ def get_allowed_origins() -> list[str]:
         "http://localhost:5173,http://127.0.0.1:5173",
     )
 
-    origins = [
+    return [
         origin.strip()
         for origin in raw.split(",")
         if origin.strip()
     ]
 
-    return origins
+
+def get_allowed_hosts() -> list[str]:
+    raw = os.getenv(
+        "ERAFORGE_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,testserver",
+    )
+
+    return [
+        host.strip()
+        for host in raw.split(",")
+        if host.strip()
+    ]
 
 
 def get_docs_enabled() -> bool:

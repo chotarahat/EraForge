@@ -2,7 +2,11 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.security import get_allowed_origins, get_docs_enabled
+from app.security import (
+    get_allowed_hosts,
+    get_allowed_origins,
+    get_docs_enabled,
+)
 
 
 class TestSecurity(unittest.TestCase):
@@ -35,6 +39,39 @@ class TestSecurity(unittest.TestCase):
             [
                 "https://example.com",
                 "https://app.example.com",
+            ],
+        )
+
+    def test_default_allowed_hosts(self):
+        with patch.dict(os.environ, {}, clear=True):
+            hosts = get_allowed_hosts()
+
+        self.assertEqual(
+            hosts,
+            [
+                "localhost",
+                "127.0.0.1",
+                "testserver",
+            ],
+        )
+
+    def test_custom_allowed_hosts(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ERAFORGE_ALLOWED_HOSTS": (
+                    "example.com,api.example.com"
+                )
+            },
+            clear=True,
+        ):
+            hosts = get_allowed_hosts()
+
+        self.assertEqual(
+            hosts,
+            [
+                "example.com",
+                "api.example.com",
             ],
         )
 
