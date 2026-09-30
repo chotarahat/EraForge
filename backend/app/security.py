@@ -39,3 +39,22 @@ def get_docs_enabled() -> bool:
         "yes",
         "on",
     }
+def get_max_request_bytes() -> int:
+    raw = os.getenv(
+        "ERAFORGE_MAX_REQUEST_BYTES",
+        str(10 * 1024 * 1024),
+    )
+
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "ERAFORGE_MAX_REQUEST_BYTES must be an integer."
+        ) from exc
+
+    if value <= 0:
+        raise ValueError(
+            "ERAFORGE_MAX_REQUEST_BYTES must be greater than zero."
+        )
+
+    return value

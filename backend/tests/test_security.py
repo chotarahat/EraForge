@@ -6,6 +6,7 @@ from app.security import (
     get_allowed_hosts,
     get_allowed_origins,
     get_docs_enabled,
+    get_max_request_bytes,
 )
 
 
@@ -96,6 +97,44 @@ class TestSecurity(unittest.TestCase):
                     clear=True,
                 ):
                     self.assertTrue(get_docs_enabled())
+    def test_default_max_request_bytes(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                get_max_request_bytes(),
+                10 * 1024 * 1024,
+            )
+
+
+    def test_custom_max_request_bytes(self):
+        with patch.dict(
+            os.environ,
+            {"ERAFORGE_MAX_REQUEST_BYTES": "2048"},
+            clear=True,
+        ):
+            self.assertEqual(
+                get_max_request_bytes(),
+                2048,
+            )
+
+
+    def test_invalid_max_request_bytes(self):
+        with patch.dict(
+            os.environ,
+            {"ERAFORGE_MAX_REQUEST_BYTES": "invalid"},
+            clear=True,
+        ):
+            with self.assertRaises(ValueError):
+                get_max_request_bytes()
+
+
+    def test_non_positive_max_request_bytes(self):
+        with patch.dict(
+            os.environ,
+            {"ERAFORGE_MAX_REQUEST_BYTES": "0"},
+            clear=True,
+        ):
+            with self.assertRaises(ValueError):
+                get_max_request_bytes()
 
 
 if __name__ == "__main__":

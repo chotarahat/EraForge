@@ -1,33 +1,18 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import JSONResponse
+
+from app.ai.factory import get_provider_info
 from app.asset_manifest import build_asset_manifest, resolve_asset_manifest
 from app.assets import AssetDefinition, AssetResolutionResult
 from app.geography import GeographyPlan
 from app.geography_manifest import build_geography_manifest
-from app.renderer import RenderPlan, SceneRenderPlan
-from app.renderer_planner import build_render_plan
-from app.render_pipeline import render_preview_bundle
-from app.scene_renderer import render_scene_to_svg
-from app.video_export import VideoExportSettings
-from app.video_pipeline import export_render_plan
-from app.project_store import (
-    create_project,
-    delete_project,
-    get_project,
-    list_projects,
-    update_project,
-)
-from app.security import (
-    get_allowed_hosts,
-    get_allowed_origins,
-    get_docs_enabled,
-)
 from app.narration import (
     LocalTTS,
     NarrationManifest,
@@ -37,6 +22,23 @@ from app.narration import (
     build_narration_plan,
     generate_narration,
 )
+from app.project_store import (
+    create_project,
+    delete_project,
+    get_project,
+    list_projects,
+    update_project,
+)
+from app.renderer import RenderPlan, SceneRenderPlan
+from app.renderer_planner import build_render_plan
+from app.render_pipeline import render_preview_bundle
+from app.scene_renderer import render_scene_to_svg
+from app.security import (
+    get_allowed_hosts,
+    get_allowed_origins,
+    get_docs_enabled,
+    get_max_request_bytes,
+)
 from app.subtitles import (
     SubtitleSyncReport,
     SubtitleTrack,
@@ -45,9 +47,11 @@ from app.subtitles import (
     validate_subtitle_track,
     write_srt_file,
 )
+from app.video_export import VideoExportSettings
+from app.video_pipeline import export_render_plan
+
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
-from .ai.factory import get_provider_info
 
 
 class NarrationManifestRequest(BaseModel):
@@ -84,10 +88,45 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
+_MAX_REQUEST_BYTES = get_max_request_bytes()
+
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=get_allowed_hosts(),
 )
+
+@app.middleware("http")
+async def request_size_limit(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+
+    if content_length is not None:
+        try:
+            request_size = int(content_length)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header."},
+            )
+
+        if request_size > _MAX_REQUEST_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Request body is too large."},
+            )
+
+    return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error."},
+    )
+
 
 app.add_middleware(
     CORSMiddleware,
