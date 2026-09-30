@@ -228,3 +228,6 @@ backend/assets/*
 !backend/assets/background/
 !backend/assets/illustration/
 !backend/assets/character/
+
+# Local renderer outputs
+backend/outputs/
