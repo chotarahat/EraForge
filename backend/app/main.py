@@ -23,9 +23,11 @@ from app.narration import (
     generate_narration,
 )
 from app.subtitles import (
+    SubtitleSyncReport,
     SubtitleTrack,
     build_subtitle_track,
     subtitle_track_to_srt,
+    validate_subtitle_track,
     write_srt_file,
 )
 from .models import PlanRequest, ScenePlan
@@ -36,6 +38,11 @@ from .ai.factory import get_provider_info
 class NarrationManifestRequest(BaseModel):
     plan: ScenePlan
     narration: NarrationPlan
+
+
+class SubtitleSyncRequest(BaseModel):
+    plan: ScenePlan
+    narration_manifest: NarrationManifest | None = None
 
 
 app = FastAPI(title="EraForge API", version="0.1.0")
@@ -94,7 +101,27 @@ def create_geography_plan(plan: ScenePlan):
     response_model=SubtitleTrack,
 )
 def subtitle_plan(plan: ScenePlan):
-    return build_subtitle_track(plan)
+    return build_subtitle_track(
+        plan
+    )
+
+
+@app.post(
+    "/api/subtitles/sync",
+    response_model=SubtitleSyncReport,
+)
+def subtitle_sync(
+    request: SubtitleSyncRequest,
+):
+    track = build_subtitle_track(
+        request.plan,
+        request.narration_manifest,
+    )
+
+    return validate_subtitle_track(
+        request.plan,
+        track,
+    )
 
 
 @app.post("/api/subtitles/srt")
@@ -108,21 +135,37 @@ def subtitle_srt(plan: ScenePlan):
 
 
 @app.post("/api/subtitles/generate")
-def subtitle_generate(plan: ScenePlan):
-    track = build_subtitle_track(plan)
+def subtitle_generate(
+    plan: ScenePlan,
+):
+    track = build_subtitle_track(
+        plan
+    )
 
-    output_path = write_srt_file(track)
+    validation = validate_subtitle_track(
+        plan,
+        track,
+    )
+
+    output_path = write_srt_file(
+        track
+    )
 
     return {
         "cue_count": len(track.cues),
         "output_file": output_path,
         "srt": subtitle_track_to_srt(track),
+        "sync_valid": validation.valid,
+        "sync_issues": [
+            issue.model_dump()
+            for issue in validation.issues
+        ],
     }
 
 
 @app.get("/api/subtitles/file/{filename}")
 def subtitle_file(filename: str):
-    output_dir = Path("backend/outputs/subtitles")
+    output_dir = Path("outputs/subtitles")
     file_path = output_dir / Path(filename).name
 
     if not file_path.exists() or file_path.suffix.lower() != ".srt":

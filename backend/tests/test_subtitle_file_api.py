@@ -12,7 +12,7 @@ class TestSubtitleFileAPI(unittest.TestCase):
         cls.client = TestClient(app)
 
         cls.output_dir = Path(
-            "backend/outputs/subtitles"
+            "outputs/subtitles"
         )
 
         cls.output_dir.mkdir(
