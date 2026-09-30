@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.asset_manifest import build_asset_manifest
-from app.assets import AssetDefinition
+from app.asset_manifest import build_asset_manifest, resolve_asset_manifest
+from app.assets import AssetDefinition, AssetResolutionResult
 from .models import PlanRequest, ScenePlan
 from .planner import create_plan
 from .ai.factory import get_provider_info
@@ -47,3 +47,17 @@ def validate_plan(plan: ScenePlan):
 @app.post("/api/assets/plan", response_model=list[AssetDefinition])
 def create_asset_plan(plan: ScenePlan):
     return build_asset_manifest(plan)
+
+
+@app.post(
+    "/api/assets/resolve",
+    response_model=AssetResolutionResult,
+)
+def resolve_assets(plan: ScenePlan):
+    resolved, missing, placeholders = resolve_asset_manifest(plan)
+
+    return AssetResolutionResult(
+        resolved=resolved,
+        missing=missing,
+        placeholders=placeholders,
+    )

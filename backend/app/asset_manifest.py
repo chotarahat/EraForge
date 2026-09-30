@@ -2,7 +2,8 @@ from collections import defaultdict
 import re
 
 from app.asset_planner import build_asset_requirements
-from app.assets import AssetDefinition
+from app.asset_library import LocalAssetLibrary
+from app.assets import AssetDefinition, AssetRequirement
 from app.models import Scene, ScenePlan
 
 
@@ -57,3 +58,60 @@ def build_asset_manifest(plan: ScenePlan) -> list[AssetDefinition]:
         )
 
     return assets
+
+
+def resolve_asset_manifest(
+    plan,
+    asset_root: str = "backend/assets",
+):
+    library = LocalAssetLibrary(asset_root)
+
+    requirements: list[AssetRequirement] = []
+
+    for scene in plan.scenes:
+        requirements.extend(
+            build_asset_requirements(scene)
+        )
+
+    unique_requirements: dict[
+        tuple[str, str],
+        AssetRequirement,
+    ] = {}
+
+    for requirement in requirements:
+        key = (
+            requirement.type,
+            requirement.name.strip().lower(),
+        )
+
+        unique_requirements[key] = requirement
+
+    resolved, missing = library.resolve(
+        unique_requirements.values()
+    )
+
+    placeholders: list[AssetDefinition] = []
+
+    for requirement in missing:
+        normalized_name = requirement.name.strip().lower()
+        slug = re.sub(
+            r"[^a-z0-9]+",
+            "_",
+            normalized_name,
+        ).strip("_")
+
+        placeholders.append(
+            AssetDefinition(
+                id=f"placeholder_{requirement.type}_{slug}",
+                type=requirement.type,
+                name=requirement.name,
+                source="placeholder",
+                path=None,
+                status="placeholder",
+                metadata={
+                    "original_source": requirement.source,
+                },
+            )
+        )
+
+    return resolved, missing, placeholders
