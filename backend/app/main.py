@@ -22,6 +22,7 @@ from app.project_store import (
     list_projects,
     update_project,
 )
+from app.security import get_allowed_origins, get_docs_enabled
 from app.narration import (
     LocalTTS,
     NarrationManifest,
@@ -68,15 +69,37 @@ class ProjectUpdateRequest(BaseModel):
     scene_plan: ScenePlan | None = None
 
 
-app = FastAPI(title="EraForge API", version="0.1.0")
+_docs_enabled = get_docs_enabled()
+
+app = FastAPI(
+    title="EraForge API",
+    version="0.1.0",
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=()"
+    )
+
+    return response
 
 
 @app.get("/api/health")
