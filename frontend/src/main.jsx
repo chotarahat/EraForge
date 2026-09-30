@@ -161,6 +161,9 @@ function App() {
   const [renderLoading, setRenderLoading] = useState(false);
   const [renderError, setRenderError] = useState("");
   const [selectedRenderScene, setSelectedRenderScene] = useState(null);
+  const [videoExport, setVideoExport] = useState(null);
+  const [videoExporting, setVideoExporting] = useState(false);
+  const [videoExportError, setVideoExportError] = useState("");
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState("");
   const [assetResolution, setAssetResolution] = useState({
@@ -600,6 +603,39 @@ function App() {
       setRenderError(error.message || "Failed to render preview");
     } finally {
       setRenderLoading(false);
+    }
+  }
+
+  async function exportVideo() {
+    setVideoExporting(true);
+    setVideoExportError("");
+    setVideoExport(null);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/render/export`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(plan),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Video export failed.");
+      }
+
+      const result = await response.json();
+      setVideoExport(result);
+    } catch (error) {
+      setVideoExportError(
+        error instanceof Error ? error.message : "Video export failed."
+      );
+    } finally {
+      setVideoExporting(false);
     }
   }
 
@@ -1756,6 +1792,84 @@ function App() {
                 ) : (
                   <div className="render-empty">
                     Click <strong>Render Preview</strong> to generate scene previews.
+                  </div>
+                )}
+              </section>
+
+              <section className="panel video-export-panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Video Export</h2>
+                    <p>Render the current scene plan into an MP4 video.</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={exportVideo}
+                    disabled={videoExporting || !plan}
+                  >
+                    {videoExporting ? "Exporting..." : "Export MP4"}
+                  </button>
+                </div>
+
+                {videoExportError && (
+                  <div className="error-message">
+                    {videoExportError}
+                  </div>
+                )}
+
+                {videoExport && (
+                  <div className="video-export-result">
+                    <div className="video-export-meta">
+                      <div>
+                        <strong>Output</strong>
+                        <span>{videoExport.output_file}</span>
+                      </div>
+
+                      <div>
+                        <strong>Resolution</strong>
+                        <span>
+                          {videoExport.width} × {videoExport.height}
+                        </span>
+                      </div>
+
+                      <div>
+                        <strong>FPS</strong>
+                        <span>{videoExport.fps}</span>
+                      </div>
+
+                      <div>
+                        <strong>Frames</strong>
+                        <span>{videoExport.frame_count}</span>
+                      </div>
+
+                      <div>
+                        <strong>Duration</strong>
+                        <span>{videoExport.duration.toFixed(2)}s</span>
+                      </div>
+                    </div>
+
+                    <video
+                      className="video-export-player"
+                      controls
+                      preload="metadata"
+                      src={`${API_URL}/api/render/video/${encodeURIComponent(
+                        videoExport.output_file.split(/[\\/]/).pop()
+                      )}`}
+                    />
+
+                    <div className="video-export-actions">
+                      <a
+                        className="secondary-button"
+                        href={`${API_URL}/api/render/video/${encodeURIComponent(
+                          videoExport.output_file.split(/[\\/]/).pop()
+                        )}`}
+                        download
+                      >
+                        Download MP4
+                      </a>
+                    </div>
                   </div>
                 )}
               </section>
