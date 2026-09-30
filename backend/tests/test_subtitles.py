@@ -1,7 +1,12 @@
 import unittest
 
+from app.narration import (
+    NarrationManifest,
+    NarrationManifestSegment,
+)
 from app.subtitles import (
     SubtitleCue,
+    SubtitleTrack,
     build_subtitle_track,
     format_srt_timestamp,
     split_sentences,
@@ -169,6 +174,144 @@ class TestSubtitles(unittest.TestCase):
                 end=5,
                 text="Invalid",
             )
+
+    def test_narration_duration_controls_subtitles(self):
+        manifest = NarrationManifest(
+            segments=[
+                NarrationManifestSegment(
+                    scene_id="scene_1",
+                    start=0,
+                    end=5,
+                    text=(
+                        "History begins here. "
+                        "The story continues."
+                    ),
+                    audio_file="scene_1.wav",
+                    audio_duration=3.0,
+                )
+            ]
+        )
+
+        track = build_subtitle_track(
+            make_plan(),
+            manifest,
+        )
+
+        self.assertAlmostEqual(
+            track.cues[-1].end,
+            3.0,
+            places=3,
+        )
+
+    def test_audio_duration_cannot_exceed_scene(self):
+        manifest = NarrationManifest(
+            segments=[
+                NarrationManifestSegment(
+                    scene_id="scene_1",
+                    start=0,
+                    end=5,
+                    text="Long audio.",
+                    audio_file="scene_1.wav",
+                    audio_duration=9.0,
+                )
+            ]
+        )
+
+        track = build_subtitle_track(
+            make_plan(),
+            manifest,
+        )
+
+        self.assertLessEqual(
+            track.cues[-1].end,
+            5.0,
+        )
+
+    def test_valid_subtitle_sync(self):
+        from app.subtitles import validate_subtitle_track
+
+        track = build_subtitle_track(
+            make_plan()
+        )
+
+        report = validate_subtitle_track(
+            make_plan(),
+            track,
+        )
+
+        self.assertTrue(report.valid)
+        self.assertEqual(
+            len(report.issues),
+            0,
+        )
+
+    def test_invalid_subtitle_overlap(self):
+        from app.subtitles import validate_subtitle_track
+
+        track = SubtitleTrack(
+            cues=[
+                SubtitleCue(
+                    index=1,
+                    start=0,
+                    end=3,
+                    text="First.",
+                ),
+                SubtitleCue(
+                    index=2,
+                    start=2,
+                    end=4,
+                    text="Second.",
+                ),
+            ]
+        )
+
+        report = validate_subtitle_track(
+            make_plan(),
+            track,
+        )
+
+        self.assertFalse(report.valid)
+
+        issue_types = [
+            issue.type
+            for issue in report.issues
+        ]
+
+        self.assertIn(
+            "overlap",
+            issue_types,
+        )
+
+    def test_subtitle_outside_scene_is_invalid(self):
+        from app.subtitles import validate_subtitle_track
+
+        track = SubtitleTrack(
+            cues=[
+                SubtitleCue(
+                    index=1,
+                    start=11,
+                    end=12,
+                    text="Invalid timing.",
+                )
+            ]
+        )
+
+        report = validate_subtitle_track(
+            make_plan(),
+            track,
+        )
+
+        self.assertFalse(report.valid)
+
+        issue_types = [
+            issue.type
+            for issue in report.issues
+        ]
+
+        self.assertIn(
+            "outside_scene",
+            issue_types,
+        )
 
 
 if __name__ == "__main__":
