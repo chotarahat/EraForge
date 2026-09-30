@@ -13,6 +13,8 @@ from app.renderer import RenderPlan, SceneRenderPlan
 from app.renderer_planner import build_render_plan
 from app.render_pipeline import render_preview_bundle
 from app.scene_renderer import render_scene_to_svg
+from app.video_export import VideoExportSettings
+from app.video_pipeline import export_render_plan
 from app.narration import (
     LocalTTS,
     NarrationManifest,
@@ -308,6 +310,37 @@ def render_scene_preview(scene: SceneRenderPlan):
         "height": height,
         "svg": svg,
     }
+
+
+@app.post("/api/render/export")
+def render_export(plan: ScenePlan):
+    result = export_render_plan(plan)
+
+    return result.model_dump()
+
+
+@app.get("/api/render/video/{filename}")
+def render_video_file(filename: str):
+    output_dir = Path(
+        "outputs/video_export/videos"
+    )
+
+    file_path = output_dir / Path(filename).name
+
+    if (
+        not file_path.exists()
+        or file_path.suffix.lower() != ".mp4"
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Video file not found",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="video/mp4",
+        filename=file_path.name,
+    )
 
 
 @app.post(
