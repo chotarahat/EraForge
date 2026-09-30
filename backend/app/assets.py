@@ -55,3 +55,8 @@ class AssetDefinition(BaseModel):
     license: str | None = None
 
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+class AssetResolutionResult(BaseModel):
+    resolved: list[AssetDefinition] = Field(default_factory=list)
+    missing: list[AssetRequirement] = Field(default_factory=list)    
+    placeholders: list[AssetDefinition] = Field(default_factory=list)

@@ -137,6 +137,13 @@ function App() {
   const [assetPlan, setAssetPlan] = useState([]);
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState("");
+  const [assetResolution, setAssetResolution] = useState({
+    resolved: [],
+    missing: [],
+    placeholders: [],
+  });
+
+  const [assetResolving, setAssetResolving] = useState(false);
   const timelineErrors = draftPlan
     ? validateTimeline(draftPlan)
     : [];
@@ -182,6 +189,52 @@ function App() {
       setAssetPlan([]);
     } finally {
       setAssetLoading(false);
+    }
+  }
+
+  async function resolveAssets(planToResolve = draftPlan) {
+    if (!planToResolve) {
+      return;
+    }
+
+    try {
+      setAssetResolving(true);
+      setAssetError("");
+
+      const response = await fetch(
+        `${API_URL}/api/assets/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(planToResolve),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const detail = Array.isArray(data.detail)
+          ? data.detail.map((item) => item.msg).join("; ")
+          : data.detail || "Failed to resolve assets.";
+
+        throw new Error(detail);
+      }
+
+      setAssetResolution(data);
+    } catch (err) {
+      setAssetError(
+        err.message || "Failed to resolve assets."
+      );
+
+      setAssetResolution({
+        resolved: [],
+        missing: [],
+        placeholders: [],
+      });
+    } finally {
+      setAssetResolving(false);
     }
   }
   
@@ -512,6 +565,7 @@ function App() {
       setDraftPlan(applied);
 
       await refreshAssetPlan(applied);
+      await resolveAssets(applied);
 
       setError("");
     } catch (err) {
@@ -564,6 +618,7 @@ function App() {
       setSavedPlan(initialPlan);
 
       await refreshAssetPlan(initialPlan);
+      await resolveAssets(initialPlan);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -645,6 +700,21 @@ function App() {
                     }
                   >
                     {assetLoading ? "Planning Assets..." : "Plan Assets"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => resolveAssets(draftPlan)}
+                    disabled={
+                      !draftPlan ||
+                      timelineErrors.length > 0 ||
+                      assetResolving
+                    }
+                  >
+                    {assetResolving
+                      ? "Resolving Assets..."
+                      : "Resolve Assets"}
                   </button>
 
                   <span className="timeline-info">
@@ -894,6 +964,29 @@ function App() {
                       {assetPlan.length} assets
                     </span>
                   )}
+
+                  <div className="asset-resolution-summary">
+                    <span>
+                      Available:{" "}
+                      <strong>
+                        {assetResolution.resolved.length}
+                      </strong>
+                    </span>
+
+                    <span>
+                      Placeholders:{" "}
+                      <strong>
+                        {assetResolution.placeholders.length}
+                      </strong>
+                    </span>
+
+                    <span>
+                      Missing:{" "}
+                      <strong>
+                        {assetResolution.missing.length}
+                      </strong>
+                    </span>
+                  </div>
                 </div>
 
                 {assetError && (
@@ -932,6 +1025,22 @@ function App() {
                             <span className="asset-status">
                               {asset.status}
                             </span>
+
+                            {assetResolution.resolved.some(
+                              (item) => item.id === asset.id
+                            ) && (
+                              <span className="asset-resolution-badge available">
+                                available
+                              </span>
+                            )}
+
+                            {assetResolution.placeholders.some(
+                              (item) => item.name === asset.name
+                            ) && (
+                              <span className="asset-resolution-badge placeholder">
+                                placeholder
+                              </span>
+                            )}
                           </div>
 
                           <div className="asset-meta">
