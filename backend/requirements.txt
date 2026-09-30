@@ -3,3 +3,4 @@ uvicorn[standard]>=0.35,<1
 openai>=1.109,<2
 pydantic>=2.11,<3
 python-dotenv>=1.1,<2
+pyttsx3>=2.90,<3

@@ -135,6 +135,16 @@ function App() {
   const [savedPlan, setSavedPlan] = useState(null);
   const [aiConfig, setAIConfig] = useState(null);
   const [assetPlan, setAssetPlan] = useState([]);
+  const [narrationPlan, setNarrationPlan] = useState({
+    segments: [],
+  });
+  const [narrationVoices, setNarrationVoices] = useState([]);
+  const [selectedNarrationVoice, setSelectedNarrationVoice] = useState("");
+  const [narrationRate, setNarrationRate] = useState(170);
+  const [narrationVolume, setNarrationVolume] = useState(1);
+  const [narrationLoading, setNarrationLoading] = useState(false);
+  const [narrationError, setNarrationError] = useState("");
+  const [selectedNarrationScene, setSelectedNarrationScene] = useState(null);
   const [renderPreview, setRenderPreview] = useState(null);
   const [renderLoading, setRenderLoading] = useState(false);
   const [renderError, setRenderError] = useState("");
@@ -160,6 +170,10 @@ function App() {
       .then((response) => response.json())
       .then((data) => setAIConfig(data))
       .catch(() => setAIConfig(null));
+  }, []);
+
+  useEffect(() => {
+    loadNarrationVoices();
   }, []);
 
   async function refreshAssetPlan(planToAnalyze = draftPlan) {
@@ -242,6 +256,80 @@ function App() {
       });
     } finally {
       setAssetResolving(false);
+    }
+  }
+
+  async function loadNarrationVoices() {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/narration/voices`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to load narration voices");
+      }
+
+      const data = await response.json();
+
+      setNarrationVoices(data.voices || []);
+
+      if (data.voices?.length && !selectedNarrationVoice) {
+        setSelectedNarrationVoice(data.voices[0].id);
+      }
+    } catch (error) {
+      setNarrationError(
+        error.message || "Failed to load narration voices"
+      );
+    }
+  }
+
+  async function generateNarration() {
+    setNarrationLoading(true);
+    setNarrationError("");
+
+    try {
+      const payload = {
+        ...plan,
+        _narration_settings: {
+          voice: selectedNarrationVoice || null,
+          rate: Number(narrationRate),
+          volume: Number(narrationVolume),
+        },
+      };
+
+      const response = await fetch(
+        `${API_URL}/api/narration/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.detail ||
+            `Narration generation failed (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      setNarrationPlan(data);
+
+      if (data.segments?.length) {
+        setSelectedNarrationScene(data.segments[0].scene_id);
+      }
+    } catch (error) {
+      setNarrationError(
+        error.message || "Failed to generate narration"
+      );
+    } finally {
+      setNarrationLoading(false);
     }
   }
 
@@ -860,6 +948,20 @@ function App() {
                   >
                     {renderLoading ? "Rendering..." : "Render Preview"}
                   </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={generateNarration}
+                    disabled={
+                      narrationLoading ||
+                      !plan?.scenes?.length
+                    }
+                  >
+                    {narrationLoading
+                      ? "Generating Narration..."
+                      : "Generate Narration"}
+                  </button>
                 </div>
               </div>
 
@@ -1404,6 +1506,164 @@ function App() {
                 ) : (
                   <div className="render-empty">
                     Click <strong>Render Preview</strong> to generate scene previews.
+                  </div>
+                )}
+              </section>
+
+              <section className="panel narration-panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Narration</h2>
+                    <p>
+                      Generate local voice narration from scene scripts.
+                    </p>
+                  </div>
+                </div>
+
+                {narrationError && (
+                  <div className="narration-error">
+                    {narrationError}
+                  </div>
+                )}
+
+                <div className="narration-controls">
+                  <label>
+                    Voice
+
+                    <select
+                      value={selectedNarrationVoice}
+                      onChange={(event) =>
+                        setSelectedNarrationVoice(event.target.value)
+                      }
+                    >
+                      <option value="">
+                        Default voice
+                      </option>
+
+                      {narrationVoices.map((voice) => (
+                        <option
+                          key={voice.id}
+                          value={voice.id}
+                        >
+                          {voice.name || voice.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Rate
+
+                    <input
+                      type="number"
+                      min="80"
+                      max="300"
+                      value={narrationRate}
+                      onChange={(event) =>
+                        setNarrationRate(event.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Volume
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={narrationVolume}
+                      onChange={(event) =>
+                        setNarrationVolume(event.target.value)
+                      }
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={generateNarration}
+                    disabled={
+                      narrationLoading ||
+                      !plan?.scenes?.length
+                    }
+                  >
+                    {narrationLoading
+                      ? "Generating..."
+                      : "Generate Audio"}
+                  </button>
+                </div>
+
+                {narrationPlan.segments.length > 0 ? (
+                  <div className="narration-content">
+                    <div className="narration-scene-list">
+                      {narrationPlan.segments.map((segment) => (
+                        <button
+                          type="button"
+                          key={segment.scene_id}
+                          className={
+                            selectedNarrationScene === segment.scene_id
+                              ? "narration-scene-item active"
+                              : "narration-scene-item"
+                          }
+                          onClick={() =>
+                            setSelectedNarrationScene(segment.scene_id)
+                          }
+                        >
+                          <span>{segment.scene_id}</span>
+
+                          <small>
+                            {segment.duration_seconds.toFixed(2)}s
+                          </small>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="narration-preview">
+                      {(() => {
+                        const segment =
+                          narrationPlan.segments.find(
+                            (item) =>
+                              item.scene_id === selectedNarrationScene
+                          );
+
+                        if (!segment?.audio_file) {
+                          return (
+                            <div className="narration-empty">
+                              Select a narration segment.
+                            </div>
+                          );
+                        }
+
+                        const filename =
+                          segment.audio_file.split(/[\\/]/).pop();
+
+                        return (
+                          <div className="narration-player">
+                            <div className="narration-text">
+                              {segment.text}
+                            </div>
+
+                            <audio
+                              controls
+                              src={`${API_URL}/api/narration/file/${encodeURIComponent(
+                                filename
+                              )}`}
+                            />
+
+                            <div className="narration-duration">
+                              Duration:{" "}
+                              {segment.duration_seconds.toFixed(2)}s
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="narration-empty">
+                    No narration generated yet.
                   </div>
                 )}
               </section>
