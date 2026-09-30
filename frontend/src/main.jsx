@@ -138,6 +138,12 @@ function App() {
   const [narrationPlan, setNarrationPlan] = useState({
     segments: [],
   });
+  const [subtitleTrack, setSubtitleTrack] = useState({
+    cues: [],
+  });
+  const [subtitleSrt, setSubtitleSrt] = useState("");
+  const [subtitleLoading, setSubtitleLoading] = useState(false);
+  const [subtitleError, setSubtitleError] = useState("");
   const [narrationManifest, setNarrationManifest] = useState({
     segments: [],
   });
@@ -337,6 +343,120 @@ function App() {
       );
     } finally {
       setNarrationLoading(false);
+    }
+  }
+
+  async function generateSubtitles() {
+    setSubtitleLoading(true);
+    setSubtitleError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/subtitles/plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(plan),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.detail ||
+            `Subtitle generation failed (${response.status})`
+        );
+      }
+
+      const track = await response.json();
+
+      setSubtitleTrack(track);
+
+      const srtResponse = await fetch(
+        `${API_URL}/api/subtitles/srt`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(plan),
+        }
+      );
+
+      if (!srtResponse.ok) {
+        const errorData = await srtResponse.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.detail ||
+            `Subtitle SRT generation failed (${srtResponse.status})`
+        );
+      }
+
+      const srtData = await srtResponse.json();
+
+      setSubtitleSrt(srtData.srt || "");
+    } catch (error) {
+      setSubtitleError(
+        error.message || "Failed to generate subtitles"
+      );
+    } finally {
+      setSubtitleLoading(false);
+    }
+  }
+
+  async function generateSubtitleFile() {
+    setSubtitleLoading(true);
+    setSubtitleError("");
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/subtitles/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(plan),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.detail ||
+            `Subtitle file generation failed (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      setSubtitleSrt(data.srt || "");
+
+      const trackResponse = await fetch(
+        `${API_URL}/api/subtitles/plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(plan),
+        }
+      );
+
+      if (trackResponse.ok) {
+        const track = await trackResponse.json();
+        setSubtitleTrack(track);
+      }
+    } catch (error) {
+      setSubtitleError(
+        error.message || "Failed to generate subtitle file"
+      );
+    } finally {
+      setSubtitleLoading(false);
     }
   }
 
@@ -1015,6 +1135,20 @@ function App() {
                     {narrationLoading
                       ? "Generating Narration..."
                       : "Generate Narration"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={generateSubtitles}
+                    disabled={
+                      subtitleLoading ||
+                      !plan?.scenes?.length
+                    }
+                  >
+                    {subtitleLoading
+                      ? "Generating Subtitles..."
+                      : "Generate Subtitles"}
                   </button>
                 </div>
               </div>
@@ -1783,6 +1917,107 @@ function App() {
                 ) : (
                   <div className="narration-empty">
                     No narration generated yet.
+                  </div>
+                )}
+              </section>
+
+              <section className="panel subtitle-panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Subtitles</h2>
+                    <p>
+                      Generate synchronized subtitles from scene narration.
+                    </p>
+                  </div>
+                </div>
+
+                {subtitleError && (
+                  <div className="subtitle-error">
+                    {subtitleError}
+                  </div>
+                )}
+
+                <div className="subtitle-controls">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={generateSubtitles}
+                    disabled={
+                      subtitleLoading ||
+                      !plan?.scenes?.length
+                    }
+                  >
+                    {subtitleLoading
+                      ? "Generating..."
+                      : "Generate Subtitles"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={generateSubtitleFile}
+                    disabled={
+                      subtitleLoading ||
+                      !plan?.scenes?.length
+                    }
+                  >
+                    {subtitleLoading
+                      ? "Generating..."
+                      : "Generate SRT File"}
+                  </button>
+                </div>
+
+                {subtitleTrack.cues.length > 0 ? (
+                  <div className="subtitle-content">
+                    <div className="subtitle-summary">
+                      <span>
+                        {subtitleTrack.cues.length} cues
+                      </span>
+
+                      <span>
+                        Duration{" "}
+                        {subtitleTrack.cues.at(-1)?.end.toFixed(2)}s
+                      </span>
+                    </div>
+
+                    <div className="subtitle-cue-list">
+                      {subtitleTrack.cues.map((cue) => (
+                        <div
+                          key={cue.index}
+                          className="subtitle-cue"
+                        >
+                          <div className="subtitle-cue-number">
+                            {cue.index}
+                          </div>
+
+                          <div className="subtitle-cue-main">
+                            <div className="subtitle-cue-time">
+                              {cue.start.toFixed(2)}s
+                              {" → "}
+                              {cue.end.toFixed(2)}s
+                            </div>
+
+                            <div className="subtitle-cue-text">
+                              {cue.text}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {subtitleSrt && (
+                      <div className="subtitle-srt-preview">
+                        <div className="subtitle-srt-header">
+                          <strong>SRT Preview</strong>
+                        </div>
+
+                        <pre>{subtitleSrt}</pre>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="subtitle-empty">
+                    No subtitles generated yet.
                   </div>
                 )}
               </section>
